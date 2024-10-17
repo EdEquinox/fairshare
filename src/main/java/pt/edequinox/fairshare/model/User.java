@@ -7,10 +7,6 @@ public class User {
     public String password;
     public String phone;
 
-    public static void main(String[] args) {
-        System.out.println("Hello world!");
-    }
-
     public void changeInfo(String name, String email, String password, String phone) {
         this.name = name;
         this.email = email;
