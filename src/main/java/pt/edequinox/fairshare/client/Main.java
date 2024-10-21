@@ -16,7 +16,7 @@ public class Main {
             System.exit(1);
         }
         String ip = args[0];
-        clientManager = new ClientManager(ip);
+        clientManager = new ClientManager();
         Application.launch(FairShareClient.class, args);
     }
 }

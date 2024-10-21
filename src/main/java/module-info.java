@@ -10,6 +10,7 @@ module pt.edequinox.fairshare {
     requires org.kordamp.bootstrapfx.core;
     requires eu.hansolo.tilesfx;
     requires com.almasb.fxgl.all;
+    requires java.desktop;
 
     opens pt.edequinox.fairshare.client to javafx.fxml;
     exports pt.edequinox.fairshare.client;

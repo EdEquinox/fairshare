@@ -1,20 +1,20 @@
 package pt.edequinox.fairshare.model;
 
+import java.util.Arrays;
+
 public class Group {
 
         public String name;
-        public String description;
-        public String password;
+        public User[] members;
+        public Expense[] expenses;
 
-        public void changeInfo(String name, String description, String password) {
+        public void changeName(String name) {
             this.name = name;
-            this.description = description;
-            this.password = password;
         }
 
         public void printInfo() {
             System.out.println("Name: " + name);
-            System.out.println("Description: " + description);
-            System.out.println("Password: " + password);
+            System.out.println("Members: " + Arrays.toString(members));
+            System.out.println("Expenses: " + Arrays.toString(expenses));
         }
 }
