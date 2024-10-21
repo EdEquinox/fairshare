@@ -2,6 +2,7 @@ package pt.edequinox.fairshare.client.model.fsm.states;
 
 import pt.edequinox.fairshare.client.model.data.ClientData;
 import pt.edequinox.fairshare.client.model.fsm.ClientContext;
+import pt.edequinox.fairshare.client.model.fsm.ClientState;
 import pt.edequinox.fairshare.client.model.fsm.ClientStateAdapter;
 
 public class GroupState extends ClientStateAdapter {
@@ -52,5 +53,10 @@ public class GroupState extends ClientStateAdapter {
     @Override
     public boolean payTo() {
         return super.payTo();
+    }
+
+    @Override
+    public ClientState getState() {
+        return ClientState.GROUP;
     }
 }

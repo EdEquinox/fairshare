@@ -19,7 +19,7 @@ public enum ClientState {
 
 
     static IClientState createState(ClientState state, ClientContext context, ClientData data) {
-        switch (state) {
+        return switch (state) {
             case LOGGED_OUT -> new LoggedOutState(context, data);
             case GROUP_SETTINGS -> new GroupSettingsState(context, data);
             case USER_INVITATIONS -> new UserInvitationsState(context, data);
@@ -30,8 +30,8 @@ public enum ClientState {
             case INVITE -> new InviteState(context, data);
             case MEMBER_INFO -> new MemberInfoState(context, data);
             case EXPENSE -> new ExpenseState(context, data);
+            case NEW_GROUP -> new NewGroupState(context, data);
             case TRANSACTION -> new TransactionState(context, data);
         };
-        return null;
     }
 }

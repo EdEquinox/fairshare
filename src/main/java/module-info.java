@@ -11,9 +11,12 @@ module pt.edequinox.fairshare {
     requires eu.hansolo.tilesfx;
     requires com.almasb.fxgl.all;
     requires java.desktop;
+    requires javafx.graphics;
 
     opens pt.edequinox.fairshare.client to javafx.fxml;
     exports pt.edequinox.fairshare.client;
     exports pt.edequinox.fairshare.model;
     opens pt.edequinox.fairshare.model to javafx.fxml;
+    exports pt.edequinox.fairshare.client.ui to javafx.graphics;
+
 }

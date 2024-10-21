@@ -9,6 +9,7 @@ public abstract class ClientStateAdapter implements IClientState {
 
    protected ClientStateAdapter(ClientContext context, ClientData data) {
        this.context = context;
+         this.data = data;
    }
 
    protected void changeState(ClientState state) {
@@ -91,9 +92,4 @@ public abstract class ClientStateAdapter implements IClientState {
     public boolean payTo() {
         return false;
     }
-
-    public ClientState getState() {
-        return null;
-    }
-
 }

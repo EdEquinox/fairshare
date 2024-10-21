@@ -18,6 +18,7 @@ public class MainMenuState extends ClientStateAdapter {
     @Override
     public boolean logout() {
         data.logout();
+        changeState(ClientState.LOGGED_OUT);
         return true;
     }
 

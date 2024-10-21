@@ -5,34 +5,30 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="23f0b205-8ef6-4c57-9038-0f6ac31bb75e" name="Changes" comment="Ugh">
-      <change afterPath="$PROJECT_DIR$/State_Diagram.svg" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/data/ClientData.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/ClientContext.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/ClientState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/ClientStateAdapter.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/IClientState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/ExpenseState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/GroupSettingsState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/GroupState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/GroupsState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/InviteState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/LoggedOutState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/MainMenuState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/MemberInfoState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/TransactionState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/UserInvitationsState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/UserSettingsState.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/server_backup/Main.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/uiDesigner.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/NewGroupState.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/ui/AddExpenseUI.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/ui/EditProfileUI.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/ui/GroupsUI.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/ui/InvitesUI.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/ui/MainMenuUI.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/ui/NewGroupUI.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data.sqlite" beforeDir="false" afterPath="$PROJECT_DIR$/data.sqlite" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/module-info.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/module-info.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/Main.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/Main.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/ClientManager.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/ClientManager.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/model/Expense.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/model/Expense.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/model/Group.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/model/Group.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/model/Invitation.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/model/Invitation.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/model/Transaction.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/model/Transaction.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/server/Main.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/server/Main.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/ClientState.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/ClientState.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/ClientStateAdapter.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/ClientStateAdapter.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/ExpenseState.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/ExpenseState.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/GroupState.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/GroupState.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/GroupsState.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/GroupsState.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/InviteState.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/InviteState.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/LoggedOutState.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/LoggedOutState.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/MainMenuState.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/MainMenuState.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/MemberInfoState.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/MemberInfoState.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/TransactionState.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/model/fsm/states/TransactionState.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/ui/FairShareClient.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/ui/FairShareClient.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/ui/RootPane.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/pt/edequinox/fairshare/client/ui/LandingUI.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -64,8 +60,8 @@
 }</component>
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/EdEquinox/fairshare&quot;,
-    &quot;accountId&quot;: &quot;6f1da5a9-cbb5-4494-be52-2a18bcc9d4fb&quot;
+    &quot;url&quot;: &quot;https://github.com/EdEquinox/fairshare.git&quot;,
+    &quot;accountId&quot;: &quot;dcc1653b-ef01-4303-936c-77ba292e4e49&quot;
   }
 }</component>
   <component name="MavenImportPreferences">
@@ -87,27 +83,30 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "main",
-    "ignore.virus.scanning.warn.message": "true",
-    "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "D:/ISEC/A3S1/AMOV/PAC",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "preferences.pluginManager",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Application.FairShareClient.executor&quot;: &quot;Run&quot;,
+    &quot;Application.Main.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;D:/ISEC/A3S1/AMOV/PAC&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CreateClassDialog.RecentsKey">
       <recent name="pt.edequinox.fairshare.client.model.fsm.states" />
-      <recent name="pt.edequinox.fairshare.client.model" />
       <recent name="pt.edequinox.fairshare.client.ui" />
+      <recent name="pt.edequinox.fairshare.client.model" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
       <recent name="D:\ISEC\A3S1\PD\FairShare" />
@@ -115,6 +114,40 @@
     <key name="MoveClassesOrPackagesDialog.RECENTS_KEY">
       <recent name="pt.edequinox.fairshare" />
     </key>
+  </component>
+  <component name="RunManager" selected="Application.Main">
+    <configuration name="FairShareClient" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
+      <option name="MAIN_CLASS_NAME" value="pt.edequinox.fairshare.client.ui.FairShareClient" />
+      <module name="FairShare" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="pt.edequinox.fairshare.client.ui.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Main" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
+      <option name="MAIN_CLASS_NAME" value="pt.edequinox.fairshare.client.Main" />
+      <module name="FairShare" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="pt.edequinox.fairshare.client.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Application.Main" />
+        <item itemvalue="Application.FairShareClient" />
+      </list>
+    </recent_temporary>
   </component>
   <component name="SharedIndexes">
     <attachedChunks>
@@ -136,6 +169,8 @@
       <workItem from="1729200818438" duration="31000" />
       <workItem from="1729200858390" duration="360000" />
       <workItem from="1729346301883" duration="15078000" />
+      <workItem from="1729517939002" duration="3182000" />
+      <workItem from="1729521276657" duration="1752000" />
     </task>
     <task id="LOCAL-00001" summary="First commit">
       <option name="closed" value="true" />

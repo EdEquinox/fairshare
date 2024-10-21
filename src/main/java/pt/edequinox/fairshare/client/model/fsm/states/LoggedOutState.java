@@ -19,6 +19,7 @@ public class LoggedOutState extends ClientStateAdapter {
     @Override
     public boolean login(String email, String password) {
         data.login(email, password);
+        changeState(ClientState.MAIN_MENU);
         return true;
     }
 
