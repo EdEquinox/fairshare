@@ -7,9 +7,10 @@
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Text?>
 
-<StackPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.RegisterController" maxWidth="760">
+<StackPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.RegisterController"
+           prefWidth="800" prefHeight="600">
     <!-- VBox to organize elements vertically -->
-    <VBox alignment="CENTER" spacing="20" maxWidth="760">
+    <VBox alignment="CENTER" spacing="20" prefWidth="800" prefHeight="600">
         <!-- Title, centered at the top -->
         <Text text="Register" style="-fx-font-size: 24; -fx-font-weight: bold; -fx-padding: 10 20"/>
 
@@ -26,9 +27,12 @@
         <!-- Register button -->
         <Button text="Register" onAction="#handleRegisterAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #FF9800; -fx-text-fill: white;"/>
 
+        <!-- Back button to navigate to previous screen -->
+        <Button text="Back" onAction="#handleBackAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #007BFF; -fx-text-fill: white;"/>
+
         <!-- Footer with the message -->
         <VBox alignment="CENTER" spacing="10" style="-fx-padding: 20;">
-            <Text text="Already have an account? <a href='login'>Login here</a>" style="-fx-font-size: 14; -fx-text-fill: #007BFF;"/>
+            <Text text="Already have an account? " style="-fx-font-size: 14; -fx-text-fill: #007BFF;"/>
         </VBox>
     </VBox>
 </StackPane>

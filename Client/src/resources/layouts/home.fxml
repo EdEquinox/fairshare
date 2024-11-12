@@ -7,9 +7,9 @@
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.text.Text?>
 
-<StackPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.HomeController" maxWidth="760">
+<StackPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.HomeController" prefWidth="800" prefHeight="600">
     <!-- VBox to organize elements vertically -->
-    <VBox alignment="CENTER" spacing="20" maxWidth="760">
+    <VBox alignment="CENTER" spacing="20" prefWidth="800" prefHeight="600">
         <!-- Title, centered at the top -->
         <Text text="FairShare" style="-fx-font-size: 24; -fx-font-weight: bold; -fx-padding: 10 20"/>
 
@@ -29,6 +29,7 @@
         <!-- Space to push the footer to the bottom -->
         <Region VBox.vgrow="ALWAYS"/>
 
+        <!-- TODO: Hides this when back button is pressed in register.fxml (FIX) -->
         <!-- Footer with the message -->
         <HBox alignment="CENTER">
             <Text text="Meta01 from the Distributed Programming course, 24/25" style="-fx-font-size: 12; -fx-font-style: italic;"/>

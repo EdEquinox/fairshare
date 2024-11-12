@@ -1,9 +1,11 @@
 package controller;
 
+import communication.ClientService;
 import javafx.event.ActionEvent;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import utils.AlertUtils;
+import utils.NavigationManager;
 
 public class RegisterController {
     public TextField nameField;
@@ -34,7 +36,8 @@ public class RegisterController {
             return;
         }
 
-        // Send data to sqlite database
+        // Send data to server
+
 
 
         System.out.println("User Registered: " + name + ", " + email);
@@ -43,4 +46,7 @@ public class RegisterController {
 
     }
 
+    public void handleBackAction(ActionEvent actionEvent) {
+        NavigationManager.switchScene(nameField, "home.fxml");
+    }
 }
