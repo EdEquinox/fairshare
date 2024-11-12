@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.text.Text?>
+
+<StackPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.HomeController" maxWidth="760">
+    <!-- VBox to organize elements vertically -->
+    <VBox alignment="CENTER" spacing="20" maxWidth="760">
+        <!-- Title, centered at the top -->
+        <Text text="FairShare" style="-fx-font-size: 24; -fx-font-weight: bold; -fx-padding: 10 20"/>
+
+        <Text text="FairShare helps groups of friends or colleagues manage shared expenses. Users can record payments, split costs equally, and track who owes what to whom. At the end, it simplifies settling debts between group members."
+              style="-fx-font-size: 16; -fx-wrap-text: true;" wrappingWidth="760"/>
+
+        <!-- Flexible space to center the content -->
+        <Region VBox.vgrow="ALWAYS"/>
+
+        <!-- VBox to center the buttons -->
+        <VBox alignment="CENTER" spacing="20">
+            <!-- Buttons for authentication or registration -->
+            <Button text="Authenticate" onAction="#handleLoginAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #007BFF; -fx-text-fill: white;"/>
+            <Button text="Register" onAction="#handleRegisterAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #FF9800; -fx-text-fill: white;"/>
+        </VBox>
+
+        <!-- Space to push the footer to the bottom -->
+        <Region VBox.vgrow="ALWAYS"/>
+
+        <!-- Footer with the message -->
+        <HBox alignment="CENTER">
+            <Text text="Meta01 from the Distributed Programming course, 24/25" style="-fx-font-size: 12; -fx-font-style: italic;"/>
+        </HBox>
+    </VBox>
+</StackPane>
