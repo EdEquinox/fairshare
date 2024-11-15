@@ -2,6 +2,7 @@
   <configuration default="false" name="Server" type="Application" factoryName="Application">
     <option name="MAIN_CLASS_NAME" value="Server" />
     <module name="Server" />
+    <option name="PROGRAM_PARAMETERS" value="8081 &quot;C:\Users\marga\OneDrive\Documentos\PD\PD-TP\fairshare\fairshare.db&quot;" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>

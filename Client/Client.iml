@@ -20,5 +20,8 @@
         <jarDirectory url="file://$USER_HOME$/development/javafx-sdk-23.0.1/lib" recursive="false" />
       </library>
     </orderEntry>
+    <orderEntry type="library" exported="" name="javafx-swt" level="project" />
+    <orderEntry type="library" exported="" name="gson-2.10.1" level="project" />
+    <orderEntry type="library" exported="" name="sqlite-jdbc-3.47.0.0" level="project" />
   </component>
 </module>

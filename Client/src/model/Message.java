@@ -3,9 +3,9 @@ package model;
 public class Message {
 
     private String type;
-    private Object data;
+    private String data;
 
-    public Message(String type, Object data) {
+    public Message(String type, String data) {
         this.type = type;
         this.data = data;
     }
@@ -18,11 +18,11 @@ public class Message {
         this.type = type;
     }
 
-    public Object getData() {
+    public String getData() {
         return data;
     }
 
-    public void setData(Object data) {
+    public void setData(String data) {
         this.data = data;
     }
 

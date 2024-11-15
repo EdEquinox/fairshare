@@ -7,38 +7,40 @@ import java.net.Socket;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.sql.ResultSet;
 
 public class ServerService {
-    private final int serverPort;
     private final String databasePath;
-    private ServerSocket serverSocket;
+    private final ServerSocket serverSocket;
 
-    public ServerService(int serverPort, String databasePath) {
-        this.serverPort = serverPort;
+    public ServerService(String databasePath, ServerSocket serverSocket) {
         this.databasePath = databasePath;
+        this.serverSocket = serverSocket;
     }
 
     /**
      * Starts the server and listens for incoming client connections.
      */
     public void startServer() throws IOException {
-        // Verifica se o arquivo da base de dados já existe
+        Logger.info("Starting server with database path: " + databasePath);
+
+        // Check if the database file already exists
         if (!doesDatabaseExist()) {
+            Logger.info("Database does not exist. Creating a new database.");
             createNewDatabase();
+        } else {
+            Logger.info("Database already exists at: " + databasePath);
         }
 
-        serverSocket = new ServerSocket(serverPort);
-        Logger.info("Server started and waiting for clients on port " + serverPort);
+        // Confirm that the database path is correctly initialized
+        Logger.info("Using database located at: " + new File(databasePath).getAbsolutePath());
 
-        // Usando o caminho da base de dados fornecido
-        Logger.info("Using database located at: " + databasePath);
-
+        // Start listening for client connections
         while (true) {
-            // Aguardar por uma conexão de cliente
             Socket clientSocket = serverSocket.accept();
             Logger.info("Client connected: " + clientSocket.getInetAddress().getHostAddress());
 
-            // Lidar com o cliente em uma nova thread
+            // Handle each client in a new thread
             ClientHandler clientHandler = new ClientHandler(clientSocket, databasePath);
             new Thread(clientHandler).start();
         }
@@ -54,33 +56,79 @@ public class ServerService {
     }
 
     /**
-     * Creates a new SQLite database with an initial structure and version 0 if it does not exist.
+     * Creates a new SQLite database with tables matching the model classes.
      */
     private void createNewDatabase() {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
             Statement statement = connection.createStatement();
 
-            // Criação da tabela principal para armazenar dados
-            String createTableSQL = "CREATE TABLE IF NOT EXISTS users (" +
+            Logger.info("Creating tables in new database at: " + databasePath);
+
+            // Create the users table
+            String createUserTableSQL = "CREATE TABLE IF NOT EXISTS users (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     "name TEXT NOT NULL, " +
-                    "phone_number TEXT NOT NULL, " +
+                    "phone TEXT NOT NULL, " +
                     "email TEXT NOT NULL UNIQUE, " +
                     "password TEXT NOT NULL" +
                     ");";
-            statement.execute(createTableSQL);
+            statement.execute(createUserTableSQL);
+            Logger.info("Created table: users");
 
-            // Criação da tabela de versão para armazenar o número da versão
+            // Create the groups table
+            String createGroupTableSQL = "CREATE TABLE IF NOT EXISTS groups (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "name TEXT NOT NULL" +
+                    ");";
+            statement.execute(createGroupTableSQL);
+            Logger.info("Created table: groups");
+
+            // Create the expenses table
+            String createExpenseTableSQL = "CREATE TABLE IF NOT EXISTS expenses (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "group_id INTEGER NOT NULL, " +
+                    "paid_by INTEGER NOT NULL, " +
+                    "amount REAL NOT NULL, " +
+                    "description TEXT, " +
+                    "date TEXT, " +
+                    "FOREIGN KEY(group_id) REFERENCES groups(id), " +
+                    "FOREIGN KEY(paid_by) REFERENCES users(id)" +
+                    ");";
+            statement.execute(createExpenseTableSQL);
+            Logger.info("Created table: expenses");
+
+            // Create the payments table
+            String createPaymentTableSQL = "CREATE TABLE IF NOT EXISTS payments (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "from_user_id INTEGER NOT NULL, " +
+                    "to_user_id INTEGER NOT NULL, " +
+                    "amount REAL NOT NULL, " +
+                    "date TEXT, " +
+                    "group_id INTEGER, " +
+                    "FOREIGN KEY(from_user_id) REFERENCES users(id), " +
+                    "FOREIGN KEY(to_user_id) REFERENCES users(id), " +
+                    "FOREIGN KEY(group_id) REFERENCES groups(id)" +
+                    ");";
+            statement.execute(createPaymentTableSQL);
+            Logger.info("Created table: payments");
+
+            // Create the version table
             String createVersionTableSQL = "CREATE TABLE IF NOT EXISTS version (" +
                     "version INTEGER NOT NULL" +
                     ");";
             statement.execute(createVersionTableSQL);
+            Logger.info("Created table: version");
 
-            // Definir o número da versão como 0
-            String setVersionSQL = "INSERT INTO version (version) VALUES (0);";
-            statement.executeUpdate(setVersionSQL);
+            // Set the version number if not already present
+            String checkVersionExistsSQL = "SELECT COUNT(*) AS count FROM version";
+            ResultSet rs = statement.executeQuery(checkVersionExistsSQL);
+            if (rs.next() && rs.getInt("count") == 0) {
+                String setVersionSQL = "INSERT INTO version (version) VALUES (0);";
+                statement.executeUpdate(setVersionSQL);
+                Logger.info("Inserted initial version number 0 into version table.");
+            }
 
-            Logger.info("New database created with version 0 at " + databasePath);
+            Logger.info("New database created successfully with version 0 at " + databasePath);
         } catch (Exception e) {
             Logger.error("Error creating new database: " + e.getMessage());
         }
