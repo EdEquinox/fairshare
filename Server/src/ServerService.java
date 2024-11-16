@@ -61,7 +61,7 @@ public class ServerService {
     private void createNewDatabase() {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
             Statement statement = connection.createStatement();
-
+            statement.execute("PRAGMA journal_mode=WAL;");
             Logger.info("Creating tables in new database at: " + databasePath);
 
             // Create the users table
@@ -83,15 +83,28 @@ public class ServerService {
             statement.execute(createGroupTableSQL);
             Logger.info("Created table: groups");
 
+            // Create the users_groups table (for many-to-many relationship between users and groups)
+            String createUsersGroupsTableSQL = "CREATE TABLE IF NOT EXISTS users_groups (" +
+                    "user_id INTEGER NOT NULL, " +
+                    "group_id INTEGER NOT NULL, " +
+                    "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, " +
+                    "FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE, " +
+                    "PRIMARY KEY(user_id, group_id)" +
+                    ");";
+            statement.execute(createUsersGroupsTableSQL);
+            Logger.info("Created table: users_groups");
+
             // Create the expenses table
             String createExpenseTableSQL = "CREATE TABLE IF NOT EXISTS expenses (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     "group_id INTEGER NOT NULL, " +
+                    "added_by INTEGER NOT NULL, " +
                     "paid_by INTEGER NOT NULL, " +
                     "amount REAL NOT NULL, " +
                     "description TEXT, " +
                     "date TEXT, " +
                     "FOREIGN KEY(group_id) REFERENCES groups(id), " +
+                    "FOREIGN KEY(added_by) REFERENCES users(id), " +
                     "FOREIGN KEY(paid_by) REFERENCES users(id)" +
                     ");";
             statement.execute(createExpenseTableSQL);
@@ -104,7 +117,7 @@ public class ServerService {
                     "to_user_id INTEGER NOT NULL, " +
                     "amount REAL NOT NULL, " +
                     "date TEXT, " +
-                    "group_id INTEGER, " +
+                    "group_id INTEGER NOT NULL, " +
                     "FOREIGN KEY(from_user_id) REFERENCES users(id), " +
                     "FOREIGN KEY(to_user_id) REFERENCES users(id), " +
                     "FOREIGN KEY(group_id) REFERENCES groups(id)" +
@@ -133,6 +146,7 @@ public class ServerService {
             Logger.error("Error creating new database: " + e.getMessage());
         }
     }
+
 
     /**
      * Stops the server and closes the server socket.

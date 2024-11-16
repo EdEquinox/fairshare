@@ -1,4 +1,5 @@
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import utils.Logger;
 import com.google.gson.Gson;
 import model.Message;
@@ -32,38 +33,188 @@ public class ClientHandler implements Runnable {
 
             String command;
             while ((command = in.readLine()) != null) {
-                Logger.info("Received command: " + command);  // Log the command received
+                Logger.info("Received command: " + command);
 
-                if ("REGISTER".equals(command)) {
-                    String userData = in.readLine();
-                    Logger.info("Received user data: " + userData);  // Log the user data received
+                switch (command) {
+                    case "REGISTER":
+                        handleRegister();
+                        break;
+                    case "LOGIN":
+                        handleLogin();
+                        break;
+                    case "LOGOUT":
+                        handleLogout();
+                        break;
+                    case "EDIT_PROFILE":
+                        handleEditProfile();
+                        break;
+                    case "GET_PROFILE":
+                        handleGetProfile();
+                        break;
 
-                    if (userData == null) {
-                        String errorResponse = createJsonResponse("response", "Error: No user data received.");
-                        out.println(errorResponse);
-                        Logger.info("Server response to client: " + errorResponse); // Log the error response sent
-                        continue;
-                    }
-
-                    User user = gson.fromJson(userData, User.class);
-                    String response = addUserToDatabase(user);
-                    out.println(response);
-                    Logger.info("Server response to client: " + response); // Log the success/error response sent
-                } else {
-                    String unknownCommandResponse = createJsonResponse("response", "Error: Unknown command");
-                    out.println(unknownCommandResponse);
-                    Logger.info("Server response to client: " + unknownCommandResponse); // Log unknown command
+                    default:
+                        handleUnknownCommand();
                 }
             }
         } catch (IOException e) {
             Logger.error("Error handling client: " + e.getMessage());
         } finally {
             try {
-                if (clientSocket != null) clientSocket.close();
-                Logger.info("Client connection closed.");
+                if (clientSocket != null && !clientSocket.isClosed()) {
+                    clientSocket.close();
+                    Logger.info("Client connection closed.");
+                }
             } catch (IOException e) {
                 Logger.error("Error closing client connection: " + e.getMessage());
             }
+        }
+    }
+
+
+    private void handleLogout() {
+        try {
+            Logger.info("User requested logout. Closing connection.");
+            sendResponse(createJsonResponse("response", "SUCCESS"));
+
+            // Close the server-side socket connection
+            if (clientSocket != null && !clientSocket.isClosed()) {
+                clientSocket.close();
+                Logger.info("Client connection closed after logout.");
+            }
+        } catch (IOException e) {
+            Logger.error("Error closing client connection during logout: " + e.getMessage());
+        }
+    }
+
+
+    private void handleEditProfile() throws IOException {
+        String updatedProfileData = in.readLine();
+        if (updatedProfileData == null) {
+            sendErrorResponse("No profile data received.");
+            return;
+        }
+
+        JsonObject profileJson = JsonParser.parseString(updatedProfileData).getAsJsonObject();
+        String name = profileJson.get("name").getAsString();
+        String updatedEmail = profileJson.get("email").getAsString(); // Renamed to updatedEmail
+        String phone = profileJson.get("phone").getAsString();
+        String password = profileJson.get("password").getAsString();
+
+        String updateResponse = updateUserProfile(name, updatedEmail, phone, password);
+        sendResponse(updateResponse);
+    }
+
+    private void handleGetProfile() throws IOException {
+        String userEmail = in.readLine();
+        if (userEmail == null) {
+            sendErrorResponse("No email provided for fetching profile.");
+            return;
+        }
+
+        String profileResponse = getUserProfile(userEmail);
+        sendResponse(profileResponse);
+    }
+
+    private String getUserProfile(String email) {
+        String url = "jdbc:sqlite:" + databasePath;
+        String querySQL = "SELECT name, email, phone, password FROM users WHERE email = ?";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement stmt = conn.prepareStatement(querySQL)) {
+
+            stmt.setString(1, email);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                JsonObject profileJson = new JsonObject();
+                profileJson.addProperty("name", rs.getString("name"));
+                profileJson.addProperty("email", rs.getString("email"));
+                profileJson.addProperty("phone", rs.getString("phone"));
+                profileJson.addProperty("password", rs.getString("password"));
+
+                return createJsonResponse("response", profileJson.toString());
+            } else {
+                return createJsonResponse("response", "Error: User not found");
+            }
+        } catch (SQLException e) {
+            Logger.error("Database error while fetching profile: " + e.getMessage());
+            return createJsonResponse("response", "Error: Database error");
+        }
+    }
+
+    private String updateUserProfile(String name, String email, String phone, String password) {
+        String url = "jdbc:sqlite:" + databasePath;
+        String updateSQL = "UPDATE users SET name = ?, phone = ?, password = ? WHERE email = ?";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement stmt = conn.prepareStatement(updateSQL)) {
+
+            stmt.setString(1, name);
+            stmt.setString(2, phone);
+            stmt.setString(3, password);
+            stmt.setString(4, email);
+
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected > 0) {
+                Logger.info("User profile updated successfully for email: " + email);
+                return createJsonResponse("response", "SUCCESS");
+            } else {
+                Logger.error("No user found with email: " + email);
+                return createJsonResponse("response", "Error: User not found");
+            }
+        } catch (SQLException e) {
+            Logger.error("Database error while updating profile: " + e.getMessage());
+            return createJsonResponse("response", "Error: Database error");
+        }
+    }
+
+    private void handleRegister() throws IOException {
+        String userData = in.readLine();
+        if (userData == null) {
+            sendErrorResponse("No user data received.");
+            return;
+        }
+        User user = gson.fromJson(userData, User.class);
+        String response = addUserToDatabase(user);
+        sendResponse(response);
+    }
+
+    private void handleLogin() throws IOException {
+        String loginData = in.readLine();
+        if (loginData == null) {
+            sendErrorResponse("No login data received.");
+            return;
+        }
+        JsonObject loginJson = JsonParser.parseString(loginData).getAsJsonObject();
+        String email = loginJson.get("email").getAsString();
+        String password = loginJson.get("password").getAsString();
+
+        String loginResponse = authenticateUser(email, password);
+        sendResponse(loginResponse);
+    }
+
+    private void handleUnknownCommand() {
+        String unknownCommandResponse = createJsonResponse("response", "Error: Unknown command");
+        sendResponse(unknownCommandResponse);
+    }
+
+    private void sendResponse(String response) {
+        out.println(response);
+        Logger.info("Server response to client: " + response);
+    }
+
+    private void sendErrorResponse(String error) {
+        sendResponse(createJsonResponse("response", "Error: " + error));
+    }
+
+    private void closeClientConnection() {
+        try {
+            if (clientSocket != null && !clientSocket.isClosed()) {
+                clientSocket.close();
+                Logger.info("Client connection closed.");
+            }
+        } catch (IOException e) {
+            Logger.error("Error closing client connection: " + e.getMessage());
         }
     }
 
@@ -109,4 +260,34 @@ public class ClientHandler implements Runnable {
         response.addProperty("data", data);
         return response.toString();
     }
+
+    private String authenticateUser(String email, String password) {
+        String url = "jdbc:sqlite:" + databasePath;
+        String querySQL = "SELECT COUNT(*) FROM users WHERE email = ? AND password = ?";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement stmt = conn.prepareStatement(querySQL)) {
+
+            // Set the parameters for the query
+            stmt.setString(1, email);
+            stmt.setString(2, password);
+
+            // Execute the query and check if a matching record exists
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next() && rs.getInt(1) > 0) {
+                Logger.info("User authenticated successfully: " + email);
+                return createJsonResponse("response", "SUCCESS");
+            } else {
+                Logger.error("Authentication failed for email: " + email);
+                return createJsonResponse("response", "Error: Invalid email or password");
+            }
+        } catch (SQLException e) {
+            String errorResponse = createJsonResponse("response", "Error: Database error during authentication");
+            Logger.error("Database error during authentication: " + e.getMessage());
+            return errorResponse;
+        }
+    }
+
+
+
 }

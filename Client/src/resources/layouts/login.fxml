@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Text?>
+
+<StackPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.LoginController"
+           prefWidth="800" prefHeight="600">
+    <!-- VBox to organize elements vertically -->
+    <VBox alignment="CENTER" spacing="20" prefWidth="800" prefHeight="600">
+        <!-- Title, centered at the top -->
+        <Text text="Login" style="-fx-font-size: 24; -fx-font-weight: bold; -fx-padding: 10 20"/>
+
+        <!-- Instructional text -->
+        <Text text="Please enter your credentials to log in" style="-fx-font-size: 16;"/>
+
+        <!-- Form inputs -->
+        <TextField fx:id="emailField" promptText="Email (Username)" style="-fx-font-size: 16; -fx-padding: 10 20;"/>
+        <PasswordField fx:id="passwordField" promptText="Password" style="-fx-font-size: 16; -fx-padding: 10 20;"/>
+
+        <!-- Login button -->
+        <Button text="Login" onAction="#handleLoginAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #FF9800; -fx-text-fill: white;"/>
+
+        <!-- Back button to navigate to previous screen -->
+        <Button text="Back" onAction="#handleBackAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #007BFF; -fx-text-fill: white;"/>
+
+        <!-- Footer with the message -->
+        <VBox alignment="CENTER" spacing="10" style="-fx-padding: 20;">
+            <Text text="Don't have an account? Register now!" style="-fx-font-size: 14; -fx-text-fill: #007BFF;"/>
+        </VBox>
+    </VBox>
+</StackPane>

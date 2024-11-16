@@ -8,10 +8,7 @@ public class User {
     private String email;
     private String phone;
     private String password;
-    private List<Group> groups;
-    private List<Expense> expensesPaid;
-    private List<Payment> paymentsMade;
-    private List<Payment> paymentsReceived;
+
 
     public User(String name, String email, String phoneNumber, String password) {
         this.name = name;

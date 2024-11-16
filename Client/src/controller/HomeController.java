@@ -1,13 +1,18 @@
 package controller;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import communication.ClientService;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 import javafx.fxml.FXMLLoader;
+import utils.AlertUtils;
 import utils.Logger;
 import controller.RegisterController;
+import utils.NavigationManager;
 
 import java.io.IOException;
 
@@ -25,8 +30,26 @@ public class HomeController {
 
     @FXML
     public void handleLoginAction(ActionEvent actionEvent) {
-        // Add logic here if needed for login action
+        // Navigate to the login screen and pass server info
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/resources/layouts/login.fxml"));
+            Scene scene = new Scene(loader.load());
+
+            // Get the LoginController from the loader and set the server info
+            LoginController loginController = loader.getController();
+            loginController.setServerInfo(serverIp, serverPort);
+
+            // Set the new scene on the current stage
+            Stage stage = (Stage) ((Node) actionEvent.getSource()).getScene().getWindow();
+            stage.setScene(scene);
+            stage.setTitle("Login Page");
+        } catch (IOException e) {
+            Logger.error("Error navigating to login screen: " + e.getMessage());
+        }
     }
+
+
+
 
     @FXML
     public void handleRegisterAction(ActionEvent actionEvent) {
