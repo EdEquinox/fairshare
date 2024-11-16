@@ -2,6 +2,12 @@ package model;
 
 public class Message {
 
+    public enum MessageType {
+        REGISTER,
+        LOGIN,
+        LOGOUT
+    }
+
     private String type;
     private Object data;
 

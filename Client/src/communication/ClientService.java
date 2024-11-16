@@ -5,35 +5,70 @@ import java.io.*;
 import java.net.Socket;
 
 public class ClientService {
+
+    private static ClientService instance;
+
     private final String serverIp;
     private final int serverPort;
     private Socket socket;
     private PrintWriter out;
     private BufferedReader in;
 
+    private static final int MAX_RETRIES = 5;
+    private static final long RETRY_DELAY_MILLIS = 5000;
+
+    // Private constructor to prevent instantiation
     public ClientService(String serverIp, int serverPort) {
         this.serverIp = serverIp;
         this.serverPort = serverPort;
     }
 
-    /**
-     * Establishes a connection with the server.
-     */
-    public void connectToServer() {
-        try {
-            socket = new Socket(serverIp, serverPort);
-            out = new PrintWriter(socket.getOutputStream(), true);
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            Logger.info("Connected to server at " + serverIp + ":" + serverPort);
-        } catch (IOException e) {
-            Logger.error("Error connecting to server: " + e.getMessage());
+    // Method to get the singleton instance
+    public static ClientService getInstance() {
+        if (instance == null) {
+            throw new IllegalStateException("ClientService not initialized. Call initialize() first.");
+        }
+        return instance;
+    }
+
+    // Method to initialize the singleton instance
+    public static void initialize(String serverIp, int serverPort) {
+        if (instance == null) {
+            instance = new ClientService(serverIp, serverPort);
+        } else {
+            throw new IllegalStateException("ClientService has already been initialized.");
         }
     }
 
-    /**
-     * Sends a message to the server.
-     * @param message The message to send.
-     */
+    public boolean connectToServer() {
+        int attempts = 0;
+        while (attempts < MAX_RETRIES) {
+            try {
+                socket = new Socket(serverIp, serverPort);
+                out = new PrintWriter(socket.getOutputStream(), true);
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                Logger.info("Connected to server at " + serverIp + ":" + serverPort);
+                return true;
+            } catch (IOException e) {
+                attempts++;
+                Logger.error("Error connecting to server (Attempt " + attempts + "): " + e.getMessage());
+                if (attempts < MAX_RETRIES) {
+                    Logger.info("Retrying in " + RETRY_DELAY_MILLIS / 1000 + " seconds...");
+                    try {
+                        Thread.sleep(RETRY_DELAY_MILLIS);
+                    } catch (InterruptedException e1) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                } else {
+                    Logger.info("Max retries reached. Could not connect to the server.");
+                    break;
+                }
+            }
+        }
+        return false;
+    }
+
     public void sendMessage(String message) {
         try {
             out.println(message);
@@ -43,10 +78,6 @@ public class ClientService {
         }
     }
 
-    /**
-     * Receives a response from the server.
-     * @return The response from the server.
-     */
     public String receiveMessage() {
         String response = null;
         try {
@@ -55,12 +86,10 @@ public class ClientService {
         } catch (IOException e) {
             Logger.error("Error receiving message: " + e.getMessage());
         }
+
         return response;
     }
 
-    /**
-     * Closes the connection to the server.
-     */
     public void closeConnection() {
         try {
             if (socket != null) {

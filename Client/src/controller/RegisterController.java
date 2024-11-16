@@ -6,6 +6,7 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import utils.AlertUtils;
 import utils.NavigationManager;
+import utils.Routes;
 
 public class RegisterController {
     public TextField nameField;
@@ -47,6 +48,6 @@ public class RegisterController {
     }
 
     public void handleBackAction(ActionEvent actionEvent) {
-        NavigationManager.switchScene(nameField, "home.fxml");
+        NavigationManager.switchScene(Routes.HOME.toString().toLowerCase());
     }
 }

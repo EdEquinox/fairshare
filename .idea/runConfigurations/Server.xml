@@ -2,6 +2,7 @@
   <configuration default="false" name="Server" type="Application" factoryName="Application">
     <option name="MAIN_CLASS_NAME" value="Server" />
     <module name="Server" />
+    <option name="PROGRAM_PARAMETERS" value="8000 $USER_HOME$/development" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>
