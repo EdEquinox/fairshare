@@ -1,6 +1,11 @@
 package communication;
 
+import com.google.gson.JsonObject;
+import model.Message;
+import model.User;
 import utils.Logger;
+import com.google.gson.Gson;
+
 import java.io.*;
 import java.net.Socket;
 
@@ -13,6 +18,8 @@ public class ClientService {
     private Socket socket;
     private PrintWriter out;
     private BufferedReader in;
+    private static final Gson gson = new Gson();
+    private boolean isConnected = false;
 
     private static final int MAX_RETRIES = 5;
     private static final long RETRY_DELAY_MILLIS = 5000;
@@ -32,12 +39,14 @@ public class ClientService {
     }
 
     // Method to initialize the singleton instance
-    public static void initialize(String serverIp, int serverPort) {
+    public static boolean initialize(String serverIp, int serverPort) {
         if (instance == null) {
             instance = new ClientService(serverIp, serverPort);
         } else {
             throw new IllegalStateException("ClientService has already been initialized.");
         }
+        Logger.error("Failed to connect to the server after retries.");
+        return false; // Connection failed
     }
 
     public boolean connectToServer() {
@@ -48,6 +57,7 @@ public class ClientService {
                 out = new PrintWriter(socket.getOutputStream(), true);
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 Logger.info("Connected to server at " + serverIp + ":" + serverPort);
+                isConnected = true;
                 return true;
             } catch (IOException e) {
                 attempts++;
@@ -66,33 +76,97 @@ public class ClientService {
                 }
             }
         }
+        isConnected = false;
         return false;
     }
 
+    // TODO: Change to send Message instead of String
     public void sendMessage(String message) {
-        try {
-            out.println(message);
-            Logger.info("Sent message to server: " + message);
-        } catch (Exception e) {
-            Logger.error("Error sending message: " + e.getMessage());
-        }
+
     }
 
+    /**
+     * Receives a message from the server.
+     * @return The message received, or null if an error occurs.
+     */
     public String receiveMessage() {
-        String response = null;
         try {
-            response = in.readLine();
-            Logger.info("Received message from server: " + response);
+            if (in != null) {
+                return in.readLine();
+            }
         } catch (IOException e) {
             Logger.error("Error receiving message: " + e.getMessage());
         }
+        return null;
+    }
 
-        return response;
+
+
+    public String registerUser(User user) {
+        return sendRequest(new Message(Message.Type.REGISTER, user));
+    }
+
+    public String loginUser(String email, String password) {
+        return sendRequest(new Message(Message.Type.LOGIN, new User(email, password, null, null)));
+    }
+
+    public String getUserProfile(String email) {
+        return sendRequest(new Message(Message.Type.GET_PROFILE, new User(email, null, null, null)));
+    }
+
+    /**
+     * Helper method to create error responses in JSON format.
+     * @param message The error message.
+     * @return A JSON string containing the error response.
+     */
+    private String createErrorResponse(String message) {
+        JsonObject errorResponse = new JsonObject();
+        errorResponse.addProperty("type", "response");
+        errorResponse.addProperty("data", message);
+        return errorResponse.toString();
+    }
+
+    public String sendRequest(Message message) {
+        try {
+            if (socket == null || socket.isClosed()) {
+                if (!connectToServer()) {
+                    return createErrorResponse("Error: Unable to connect to server");
+                }
+            }
+
+            JsonObject request = new JsonObject();
+            request.addProperty("timeStamp", System.currentTimeMillis());
+            request.addProperty("type", message.type().toString());
+            request.addProperty("message", gson.toJson(message.payload()));
+
+            if (out != null) {
+                out.println(request);
+                out.flush();
+                Logger.info("Sent message to server: " + request);
+            } else {
+                Logger.error("Attempted to send message, but output stream is not initialized.");
+            }
+
+            return receiveMessage();
+        } catch (Exception e) {
+            Logger.error("Error during command execution: " + e.getMessage());
+            return createErrorResponse("Error: " + e.getMessage());
+        }
+    }
+
+    public boolean isClientConnected() {
+        return isConnected;
     }
 
     public void closeConnection() {
         try {
-            if (socket != null) {
+            if (in != null) {
+                in.close();
+            }
+            if (out != null) {
+                out.close();
+            }
+            if (socket != null && !socket.isClosed()) {
                 socket.close();
                 Logger.info("Connection closed.");
             }
@@ -100,4 +174,8 @@ public class ClientService {
             Logger.error("Error closing connection: " + e.getMessage());
         }
     }
+
+
+
+
 }

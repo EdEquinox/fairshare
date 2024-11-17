@@ -4,4 +4,6 @@ public enum Routes {
     HOME,
     REGISTER,
     LOGIN,
+    EDIT_PROFILE,
+    DASHBOARD,
 }

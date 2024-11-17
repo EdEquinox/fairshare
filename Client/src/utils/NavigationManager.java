@@ -1,14 +1,10 @@
 package utils;
 
-import communication.ClientService;
-import communication.ClientServiceAware;
 import javafx.fxml.FXMLLoader;
-import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 
 public class NavigationManager {
 
@@ -23,30 +19,15 @@ public class NavigationManager {
     }
 
     // Method to switch scenes and inject ClientService into controllers
-    public static void switchScene(String layout) {
+    public static void switchScene(Routes route) {
         try {
+            String layout = route.toString().toLowerCase();
             FXMLLoader loader = new FXMLLoader(NavigationManager.class.getResource("/resources/layouts/" + layout + ".fxml"));
-
-            // Set the ControllerFactory to inject the ClientService
-            loader.setControllerFactory(controllerClass -> {
-                try {
-                    // Create a new instance of the controller
-                    Object controller = controllerClass.getDeclaredConstructor().newInstance();
-
-                    // If the controller implements ClientServiceAware, inject the ClientService
-                    if (controller instanceof ClientServiceAware)
-                        ((ClientServiceAware) controller).setClientService(ClientService.getInstance());
-
-                    return controller;
-                } catch (Exception e) {
-                    // Handle any exception when instantiating the controller
-                    throw new RuntimeException("Error while creating controller: " + e.getMessage(), e);
-                }
-            });
 
             // Create and set the scene
             Scene scene = new Scene(loader.load());
             primaryStage.setScene(scene);
+            primaryStage.setTitle(route.toString().toUpperCase() + " Page");
         } catch (IOException e) {
             // Catch IO errors while loading FXML
             e.printStackTrace();

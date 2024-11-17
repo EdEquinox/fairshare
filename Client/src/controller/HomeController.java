@@ -1,37 +1,35 @@
 package controller;
 
 import communication.ClientService;
-import communication.ClientServiceAware;
-import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
-import javafx.scene.Node;
 import utils.NavigationManager;
 import utils.Routes;
 
 import java.net.URL;
 import java.util.ResourceBundle;
 
-public class HomeController implements ClientServiceAware, Initializable {
+public class HomeController implements Initializable {
 
     public ClientService clientService;
 
-    public void handleLoginAction(ActionEvent actionEvent) {
-        NavigationManager.switchScene(Routes.LOGIN.toString().toLowerCase());
+    @FXML
+    public void handleLoginAction() {
+        NavigationManager.switchScene(Routes.LOGIN);
     }
+
 
     @FXML
-    public void handleRegisterAction(ActionEvent actionEvent) {
-        NavigationManager.switchScene(Routes.REGISTER.toString().toLowerCase());
-    }
-
-    @Override
-    public void setClientService(ClientService clientService) {
-        this.clientService = clientService;
+    public void handleRegisterAction() {
+        NavigationManager.switchScene(Routes.REGISTER);
     }
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
-        this.clientService.connectToServer();
+        // TODO: Do Thread to connect to server then
+        //  if error show alert dialog
+        //  if show database version and info like that to show to user that the server is up and running.
+        this.clientService = ClientService.getInstance();
+        // this.clientService.connectToServer();
     }
 }
