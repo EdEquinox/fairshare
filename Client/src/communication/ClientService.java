@@ -80,11 +80,6 @@ public class ClientService {
         return false;
     }
 
-    // TODO: Change to send Message instead of String
-    public void sendMessage(String message) {
-
-    }
-
     /**
      * Receives a message from the server.
      * @return The message received, or null if an error occurs.
