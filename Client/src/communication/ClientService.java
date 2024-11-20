@@ -1,6 +1,7 @@
 package communication;
 
 import com.google.gson.JsonObject;
+import model.Invite;
 import model.Message;
 import model.User;
 import utils.Logger;
@@ -95,7 +96,9 @@ public class ClientService {
         return null;
     }
 
-
+    public int getUserId() {
+        return 0;
+    }
 
     public String registerUser(User user) {
         return sendRequest(new Message(Message.Type.REGISTER, user));
@@ -107,6 +110,14 @@ public class ClientService {
 
     public String getUserProfile(String email) {
         return sendRequest(new Message(Message.Type.GET_PROFILE, new User(email, null, null, null)));
+    }
+
+    public String sendInvite(String inviteeEmail, int groupId) {
+        return sendRequest(new Message(Message.Type.INVITE, new Invite(inviteeEmail, groupId)));
+    }
+
+    public String getGroups() {
+        return sendRequest(new Message(Message.Type.GET_GROUPS, null));
     }
 
     /**

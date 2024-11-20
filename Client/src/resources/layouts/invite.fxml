@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import java.lang.*?>
+<?import java.util.*?>
+<?import javafx.scene.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<?import javafx.scene.text.Text?>
+<StackPane xmlns="http://javafx.com/javafx"
+           xmlns:fx="http://javafx.com/fxml"
+           fx:controller="controller.InviteController"
+           prefHeight="800.0" prefWidth="600.0">
+
+    <VBox alignment="CENTER" spacing="20" prefWidth="800" prefHeight="600">
+        <Text text="Invite" style="-fx-font-size: 24; -fx-font-weight: bold; -fx-padding: 10 20"/>
+
+        <Text text="Please enter the email of the user you want to invite" style="-fx-font-size: 16;"/>
+
+        <TextField fx:id="emailField" promptText="Email" style="-fx-font-size: 16; -fx-padding: 10 20;"/>
+
+        <Button text="Invite" onAction="#handleInviteButtonAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #FF9800; -fx-text-fill: white;"/>
+
+        <Button text="Back" onAction="#handleBackButtonAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #007BFF; -fx-text-fill: white;"/>
+
+        <VBox alignment="CENTER" spacing="10" style="-fx-padding: 20;">
+            <Text text="Don't have an account? Register now!" style="-fx-font-size: 14; -fx-text-fill: #007BFF;"/>
+        </VBox>
+    </VBox>
+
+</StackPane>

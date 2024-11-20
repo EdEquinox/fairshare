@@ -7,7 +7,7 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="module-library" exported="">
+    <orderEntry type="module-library">
       <library>
         <CLASSES>
           <root url="file://$USER_HOME$/development/javafx-sdk-23.0.1/lib" />
@@ -20,7 +20,7 @@
         <jarDirectory url="file://$USER_HOME$/development/javafx-sdk-23.0.1/lib" recursive="false" />
       </library>
     </orderEntry>
-    <orderEntry type="module-library" exported="">
+    <orderEntry type="module-library">
       <library>
         <CLASSES>
           <root url="jar://$USER_HOME$/development/gson-2.10.1.jar!/" />
@@ -29,7 +29,7 @@
         <SOURCES />
       </library>
     </orderEntry>
-    <orderEntry type="module-library" exported="">
+    <orderEntry type="module-library">
       <library>
         <CLASSES>
           <root url="jar://$USER_HOME$/development/sqlite-jdbc-3.47.0.0.jar!/" />
@@ -38,5 +38,11 @@
         <SOURCES />
       </library>
     </orderEntry>
+    <orderEntry type="library" name="javafx-sdk-20.0" level="project" />
+    <orderEntry type="library" name="bin" level="project" />
+    <orderEntry type="library" name="lib" level="project" />
+    <orderEntry type="library" exported="" name="javafx" level="application" />
+    <orderEntry type="library" name="github.javaxcel.core" level="project" />
+    <orderEntry type="library" name="sun.mail.javax" level="project" />
   </component>
 </module>

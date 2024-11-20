@@ -4,6 +4,7 @@ import utils.Logger;
 import com.google.gson.Gson;
 import model.Message;
 import model.User;
+import utils.Mailer;
 
 import java.io.*;
 import java.net.Socket;
@@ -51,6 +52,12 @@ public class ClientHandler implements Runnable {
                     case "GET_PROFILE":
                         handleGetProfile();
                         break;
+                    case "INVITE":
+                        handleInvite();
+                        break;
+                    case "GET_GROUPS":
+                        handleGetGroups();
+                        break;
 
                     default:
                         handleUnknownCommand();
@@ -70,6 +77,31 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    private void handleGetGroups() {
+        String url = "jdbc:sqlite:" + databasePath;
+        String querySQL = "SELECT id, name FROM groups";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement stmt = conn.prepareStatement(querySQL)) {
+
+            ResultSet rs = stmt.executeQuery();
+            JsonObject groupsJson = new JsonObject();
+            int count = 0;
+
+            while (rs.next()) {
+                JsonObject groupJson = new JsonObject();
+                groupJson.addProperty("id", rs.getInt("id"));
+                groupJson.addProperty("name", rs.getString("name"));
+                groupsJson.add(String.valueOf(count), groupJson);
+                count++;
+            }
+
+            sendResponse(createJsonResponse("response", groupsJson.toString()));
+        } catch (SQLException e) {
+            Logger.error("Database error while fetching groups: " + e.getMessage());
+            sendErrorResponse("Database error while fetching groups.");
+        }
+    }
 
     private void handleLogout() {
         try {
@@ -193,6 +225,22 @@ public class ClientHandler implements Runnable {
         sendResponse(loginResponse);
     }
 
+    private void handleInvite() throws IOException {
+        String inviteData = in.readLine();
+        if (inviteData == null) {
+            sendErrorResponse("No invite data received.");
+            return;
+        }
+        JsonObject inviteJson = JsonParser.parseString(inviteData).getAsJsonObject();
+        String inviteeEmail = inviteJson.get("inviteeEmail").getAsString();
+        int groupId = inviteJson.get("groupId").getAsInt();
+        int userId = inviteJson.get("userId").getAsInt();
+        String inviterEmail = inviteJson.get("inviterEmail").getAsString();
+
+        String inviteResponse = sendInvite(inviteeEmail, groupId, userId);
+        sendResponse(inviteResponse);
+    }
+
     private void handleUnknownCommand() {
         String unknownCommandResponse = createJsonResponse("response", "Error: Unknown command");
         sendResponse(unknownCommandResponse);
@@ -259,6 +307,56 @@ public class ClientHandler implements Runnable {
         response.addProperty("type", type);
         response.addProperty("data", data);
         return response.toString();
+    }
+
+    private String sendInvite(String inviteeEmail, int groupId, int userId) {
+        String url = "jdbc:sqlite:" + databasePath;
+        String checkInviteeSQL = "SELECT COUNT(*) FROM users WHERE email = ?";
+        String checkGroupSQL = "SELECT COUNT(*) FROM groups WHERE id = ?";
+        String insertSQL = "INSERT INTO group_invites (group_id, user_id) VALUES (?, ?)";
+
+        try (Connection conn = DriverManager.getConnection(url)) {
+            // Check if the invitee email exists
+            try (PreparedStatement checkInviteeStmt = conn.prepareStatement(checkInviteeSQL)) {
+                checkInviteeStmt.setString(1, inviteeEmail);
+                ResultSet rs = checkInviteeStmt.executeQuery();
+                if (!rs.next() || rs.getInt(1) == 0) {
+                    String errorResponse = createJsonResponse("response", "Error: Invitee email not found");
+                    Logger.error("Invitee email not found in the database: " + inviteeEmail);
+                    return errorResponse;
+                }
+            }
+
+            // Check if the group exists
+            try (PreparedStatement checkGroupStmt = conn.prepareStatement(checkGroupSQL)) {
+                checkGroupStmt.setInt(1, groupId);
+                ResultSet rs = checkGroupStmt.executeQuery();
+                if (!rs.next() || rs.getInt(1) == 0) {
+                    String errorResponse = createJsonResponse("response", "Error: Group not found");
+                    Logger.error("Group not found in the database: " + groupId);
+                    return errorResponse;
+                }
+            }
+
+            // Send email to invitee
+            Mailer.sendMail(inviteeEmail, "You have been invited to a group",
+                    "You have been invited to join a group. Please log in to view the invite.", "invite@farishare.pt");
+
+            // Insert the invite
+            try (PreparedStatement insertStmt = conn.prepareStatement(insertSQL)) {
+                insertStmt.setInt(1, groupId);
+                insertStmt.setInt(2, userId);
+                insertStmt.executeUpdate();
+                Logger.info("Invite sent successfully to: " + inviteeEmail);
+                return createJsonResponse("response", "SUCCESS");
+            }
+
+
+        } catch (SQLException e) {
+            String errorResponse = createJsonResponse("response", "Error: " + e.getMessage());
+            Logger.error("Database error: " + e.getMessage());
+            return errorResponse;
+        }
     }
 
     private String authenticateUser(String email, String password) {
