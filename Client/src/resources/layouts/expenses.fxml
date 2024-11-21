@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="controller.ExpensesController"
+            prefHeight="400.0" prefWidth="600.0">
+
+    <VBox spacing="10" alignment="TOP_CENTER" prefWidth="600" AnchorPane.topAnchor="10" AnchorPane.leftAnchor="10">
+
+
+        <Label text="Expenses Page" style="-fx-font-size: 20; -fx-font-weight: bold;" alignment="CENTER"/>
+
+
+        <TableView fx:id="expensesTable" prefWidth="580" style="-fx-background-color: #ffffff;">
+            <columns>
+                <TableColumn text="Date" fx:id="dateColumn" prefWidth="150"/>
+                <TableColumn text="Description" fx:id="descriptionColumn" prefWidth="250"/>
+                <TableColumn text="Amount" fx:id="amountColumn" prefWidth="100"/>
+                <TableColumn text="Paid By (User ID)" fx:id="paidByColumn" prefWidth="100"/>
+            </columns>
+        </TableView>
+
+
+
+        <Label fx:id="totalExpensesLabel" text="Total Expenses: $" style="-fx-font-size: 16; -fx-font-weight: bold;" alignment="CENTER"/>
+
+
+        <Button text="Export to CSV" onAction="#handleExportToCSV" style="-fx-font-size: 16;"/>
+        <Button text="Back" onAction="#handleGoToGroupsPage" style="-fx-font-size: 16;"/>
+    </VBox>
+</AnchorPane>
