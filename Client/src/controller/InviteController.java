@@ -1,19 +1,29 @@
 package controller;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import communication.ClientService;
 import javafx.fxml.FXML;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextField;
 import model.Group;
+import model.Message;
+import model.ServerResponse;
 import utils.AlertUtils;
 import utils.NavigationManager;
 import utils.Routes;
 
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Objects;
+
 public class InviteController {
 
-    public Group[] groups;
-    public Group[] pendingInvites;
+    public ArrayList<Group> groups;
+    public ArrayList<Group> pendingInvites;
+    Gson gson = new Gson();
 
     ClientService clientService;
 
@@ -24,44 +34,40 @@ public class InviteController {
     public ListView<Group> inviteList;
 
     @FXML
-    TextField inviteeEmailField;
+    TextField emailField;
 
-    public InviteController() {
-
+    @FXML
+    public void initialize() {
 
         clientService = ClientService.getInstance();
         if (!clientService.connectToServer()) {
             AlertUtils.showError("Connection failed", "Failed to connect to the server.");
             return;
         }
+       ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_GROUPS, clientService.getCurrentUser()));
 
-        String message = clientService.getGroups();
+       if (response == null) {
+          AlertUtils.showError("Failed to get groups", "Failed to get groups from the server.");
+          return;
+       }
 
-        if (message == null) {
-            AlertUtils.showError("Failed to get groups", "Failed to get groups from the server.");
-            return;
-        }
-
-        String[] groupNames = message.split(",");
-        groups = new Group[groupNames.length];
-        for (int i = 0; i < groupNames.length; i++) {
-            groups[i] = new Group(i, groupNames[i]);
-        }
+        Type groupListType = new TypeToken<ArrayList<Group>>() {}.getType();
+        groups = gson.fromJson(gson.toJson(response.payload()), groupListType);
 
         groupComboBox.getItems().addAll(groups);
+        groupComboBox.getSelectionModel().selectFirst();
 
-        String pendingInvitesMessage = clientService.getPendingInvites(clientService.getUserId());
+        System.out.println(groupComboBox.getItems());
 
-        if (pendingInvitesMessage == null) {
-            AlertUtils.showError("Failed to get pending invites", "Failed to get pending invites from the server.");
+        ServerResponse response2 = clientService.sendRequest(new Message(Message.Type.GET_PENDING_INVITES, clientService.getCurrentUser()));
+
+        if (response2 == null) {
+            AlertUtils.showError("Failed to get invites", "Failed to get invites from the server.");
             return;
         }
 
-        String[] pendingInviteNames = pendingInvitesMessage.split(",");
-        pendingInvites = new Group[pendingInviteNames.length];
-        for (int i = 0; i < pendingInviteNames.length; i++) {
-            pendingInvites[i] = new Group(i, pendingInviteNames[i]);
-        }
+        Type pendingInvitesType = new TypeToken<ArrayList<Group>>() {}.getType();
+        pendingInvites = gson.fromJson(gson.toJson(response2.payload()), pendingInvitesType);
 
         inviteList.getItems().addAll(pendingInvites);
 
@@ -74,7 +80,7 @@ public class InviteController {
             return;
         }
 
-        if (inviteeEmailField.getText().isEmpty()) {
+        if (emailField.getText().isEmpty()) {
             AlertUtils.showError("No email entered", "Please enter an email address.");
             return;
         }
@@ -87,10 +93,14 @@ public class InviteController {
                 return;
             }
 
-            String inviteeEmail = inviteeEmailField.getText();
-            int groupId = selectedGroup.getId();
+            String inviteeEmail = emailField.getText();
 
-            String response = clientService.sendInvite(inviteeEmail, groupId);
+            ArrayList<Object> inviteData = new ArrayList<>();
+            inviteData.add(selectedGroup);
+            inviteData.add(clientService.getCurrentUser());
+            inviteData.add(inviteeEmail);
+
+            ServerResponse response = clientService.sendRequest(new Message(Message.Type.INVITE, inviteData));
 
             if (response == null) {
                 AlertUtils.showError("Failed to send invite", "Failed to send invite to the server.");
@@ -103,6 +113,6 @@ public class InviteController {
     }
 
     public void handleBackButtonAction() {
-        NavigationManager.switchScene(Routes.HOME);
+        NavigationManager.switchScene(Routes.DASHBOARD);
     }
 }

@@ -45,8 +45,6 @@ public class Client extends Application {
         NavigationManager.switchScene(Routes.HOME);
 
         primaryStage.setTitle("Home Page");
-        primaryStage.setMaxWidth(800);
-        primaryStage.setMaxHeight(600);
         primaryStage.setMinWidth(800);
         primaryStage.setMinHeight(600);
         primaryStage.show();
