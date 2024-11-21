@@ -58,6 +58,9 @@ public class ClientHandler implements Runnable {
                     case "GET_GROUPS":
                         handleGetGroups();
                         break;
+                    case "GET_INVITES":
+                        handleGetInvites();
+                        break;
 
                     default:
                         handleUnknownCommand();
@@ -74,6 +77,36 @@ public class ClientHandler implements Runnable {
             } catch (IOException e) {
                 Logger.error("Error closing client connection: " + e.getMessage());
             }
+        }
+    }
+
+    private void handleGetInvites() {
+        String url = "jdbc:sqlite:" + databasePath;
+        String querySQL = "SELECT groups.id, groups.name FROM groups " +
+                "JOIN group_invites ON groups.id = group_invites.group_id " +
+                "WHERE group_invites.user_id = ? AND group_invites.accepted = 0";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement stmt = conn.prepareStatement(querySQL)) {
+
+            int userId = 1; // TODO: Get the user ID from the client
+            stmt.setInt(1, userId);
+            ResultSet rs = stmt.executeQuery();
+            JsonObject invitesJson = new JsonObject();
+            int count = 0;
+
+            while (rs.next()) {
+                JsonObject inviteJson = new JsonObject();
+                inviteJson.addProperty("id", rs.getInt("id"));
+                inviteJson.addProperty("name", rs.getString("name"));
+                invitesJson.add(String.valueOf(count), inviteJson);
+                count++;
+            }
+
+            sendResponse(createJsonResponse("response", invitesJson.toString()));
+        } catch (SQLException e) {
+            Logger.error("Database error while fetching invites: " + e.getMessage());
+            sendErrorResponse("Database error while fetching invites.");
         }
     }
 

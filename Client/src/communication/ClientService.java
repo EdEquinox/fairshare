@@ -120,6 +120,10 @@ public class ClientService {
         return sendRequest(new Message(Message.Type.GET_GROUPS, null));
     }
 
+    public String getPendingInvites( int userId) {
+        return sendRequest(new Message(Message.Type.GET_INVITES, userId));
+    }
+
     /**
      * Helper method to create error responses in JSON format.
      * @param message The error message.
