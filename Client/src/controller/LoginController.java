@@ -8,10 +8,7 @@ import javafx.scene.control.TextField;
 import model.Message;
 import model.ServerResponse;
 import model.User;
-import utils.AlertUtils;
-import utils.Logger;
-import utils.NavigationManager;
-import utils.Routes;
+import utils.*;
 
 import java.net.URL;
 import java.util.Base64;
@@ -83,6 +80,8 @@ public class LoginController implements Initializable {
                     Logger.info("Login successful for user.");
                     User user = new Gson().fromJson(response.payload().toString(), User.class);
                     clientService.setCurrentUser(user);
+                    // Guarda o utilizador que fez login em sharedstate
+                    SharedState.setCurrentUser(user);
                     NavigationManager.switchScene(Routes.DASHBOARD);
                 } else {
                     Logger.error("Login failed: " + response.message());

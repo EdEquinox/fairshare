@@ -1,8 +1,5 @@
 import com.google.gson.Gson;
-import model.Group;
-import model.Message;
-import model.ServerResponse;
-import model.User;
+import model.*;
 import utils.Logger;
 
 import java.io.BufferedReader;
@@ -11,6 +8,8 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ClientHandler implements Runnable {
     private final Socket clientSocket;
@@ -61,6 +60,18 @@ public class ClientHandler implements Runnable {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class);
                             handleCreateGroup(group);
                         }
+                        case Message.Type.GET_GROUPS -> {
+                            User user = gson.fromJson(gson.toJson(message.payload()), User.class);
+                            handleGetGroups(user);
+                        }
+                        case Message.Type.GET_USERS_FOR_GROUP -> {
+                            Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
+                            handleGetUsersForGroup(group);
+                        }
+                        case Message.Type.GET_EXPENSES -> {
+                            Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
+                            handleGetExpenses(group);
+                        }
                         default -> sendResponse(new ServerResponse(false, "Invalid command", null));
                     }
                 } catch (Exception e) {
@@ -82,6 +93,147 @@ public class ClientHandler implements Runnable {
             }
         }
     }
+
+    private void handleGetExpenses(Group group) {
+        // Query que seleciona as expenses de um determinado grupo pelo id e ordenado pelas datas
+        String query = "SELECT id, group_id, paid_by, amount, description, date " +
+                "FROM expenses WHERE group_id = ? ORDER BY date ASC";
+
+        boolean isSuccess = false;
+        String message;
+        List<Expense> expenses = new ArrayList<>();
+
+        // conecta à base de dados
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, group.getId()); // Usa o id do grupo passado como parametro
+            ResultSet rs = stmt.executeQuery();
+            // executa a query e em quanto tiver mais expenses continua a adicionar
+            while (rs.next()) {
+                expenses.add(new Expense(
+                        rs.getInt("id"),
+                        rs.getInt("group_id"),
+                        rs.getInt("paid_by"),
+                        rs.getDouble("amount"),
+                        rs.getString("description"),
+                        rs.getString("date")
+                ));
+            }
+            // verifica se a lista esta vazia
+            if (expenses.isEmpty()) {
+                message = "No expenses found for the group.";
+                Logger.info("No expenses found for group: " + group.name());
+            } else {
+                isSuccess = true;
+                message = "Expenses retrieved successfully.";
+                Logger.info("Expenses retrieved for group: " + group.name());
+            }
+
+        } catch (SQLException e) {
+            message = "Error while retrieving expenses.";
+            Logger.error("Database error while fetching expenses: " + e.getMessage());
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, expenses));
+    }
+
+
+
+    private void handleGetUsersForGroup(Group group) {
+        // query que utiliza a tabela conjuta de users e grupos para devolver os users de um determinado grupo
+        String query = "SELECT u.name " +
+                "FROM users u " +
+                "JOIN users_groups ug ON u.id = ug.user_id " +
+                "WHERE ug.group_id = ?";
+
+        boolean isSuccess = false;
+        String message;
+        List<String> users = new ArrayList<>();
+
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, group.getId()); // usa o id do grupo
+            ResultSet rs = stmt.executeQuery();
+            // adiciona os nomes dos grupos enquanto existirem mais
+            while (rs.next()) {
+                users.add(rs.getString("name"));
+            }
+
+            if (users.isEmpty()) {
+                message = "No users found for the group.";
+                Logger.info("No users found for group: " + group.name());
+            } else {
+                isSuccess = true;
+                message = "Users retrieved successfully.";
+                Logger.info("Users retrieved for group: " + group.name());
+            }
+
+        } catch (SQLException e) {
+            message = "Error while retrieving users.";
+            Logger.error("Database error while fetching users: " + e.getMessage());
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, users));
+    }
+
+
+
+    private void handleGetGroups(User user) {
+
+        // verificaçao no caso do user ser null ou o id ser menor ou igual a 0
+        if (user == null || user.getId() <= 0) {
+            Logger.error("Invalid user data received for GET_GROUPS: " + user);
+            sendResponse(new ServerResponse(false, "Invalid user data.", null));
+            return;
+        }
+
+        // query que seleciona os grupos relacionados a um determinado user_id
+        String url = "jdbc:sqlite:" + databasePath;
+        String query = "SELECT g.id, g.name, ug.user_id AS owner_id " +
+                "FROM groups g " +
+                "JOIN users_groups ug ON g.id = ug.group_id " +
+                "WHERE ug.user_id = ?";
+
+        boolean isSuccess = false;
+        String message;
+        List<Group> groups = new ArrayList<>();
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, user.getId());
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                groups.add(new Group(
+                        rs.getInt("id"),
+                        rs.getString("name"),
+                        rs.getInt("owner_id")
+                ));
+            }
+
+            if (groups.isEmpty()) {
+                message = "No groups found for the user.";
+                Logger.info("No groups found for user ID: " + user.getId());
+            } else {
+                isSuccess = true;
+                message = "Groups retrieved successfully.";
+                Logger.info("Groups retrieved for user ID: " + user.getId() + ": " + groups);
+            }
+
+        } catch (SQLException e) {
+            message = "Error while retrieving groups.";
+            Logger.error("Database error while fetching groups: " + e.getMessage());
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, groups));
+    }
+
+
+
+
 
     private void handleCreateGroup(Group group) {
         String url = "jdbc:sqlite:" + databasePath;

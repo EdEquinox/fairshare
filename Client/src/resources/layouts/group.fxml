@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="controller.GroupController"
+            prefHeight="400.0" prefWidth="600.0">
+
+    <VBox spacing="10" alignment="TOP_CENTER" prefWidth="600" AnchorPane.topAnchor="10" AnchorPane.leftAnchor="10">
+
+        <Label text="Group Page" style="-fx-font-size: 20; -fx-font-weight: bold;" alignment="CENTER"/>
+
+        <SplitPane dividerPositions="0.5">
+            <ListView fx:id="groupListView" prefWidth="300" style="-fx-background-color: #ffffff;"/>
+
+            <VBox spacing="5" alignment="TOP_CENTER" prefWidth="300">
+                <Label text="Users in Selected Group" style="-fx-font-size: 16; -fx-font-weight: bold;" alignment="CENTER"/>
+                <ListView fx:id="userListView" prefWidth="300" style="-fx-background-color: #ffffff;"/>
+            </VBox>
+        </SplitPane>
+
+        <Button text="Expenses" onAction="#handleGoToExpensesPage" style="-fx-font-size: 16;"/>
+        <Button text="Back" onAction="#handleGoToDashboard" style="-fx-font-size: 16;"/>
+    </VBox>
+</AnchorPane>
