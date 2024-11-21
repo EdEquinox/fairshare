@@ -9,4 +9,5 @@ public enum Routes {
     CREATE_GROUP,
     GROUP,
     EXPENSES,
+    INVITE,
 }

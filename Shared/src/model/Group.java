@@ -17,6 +17,19 @@ public class Group {
         this.ownerId = ownerId;
     }
 
+    public String getName() {
+        return name;
+    }
+
+    public int getOwnerId() {
+        return ownerId;
+    }
+
+    @Override
+    public String toString() {
+        return name;
+    }
+
     public int getId() {
         return id;
     }

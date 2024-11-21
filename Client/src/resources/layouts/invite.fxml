@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.*?>
+
+<StackPane prefHeight="800.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.InviteController">
+
+    <VBox alignment="CENTER" prefHeight="600" prefWidth="800" spacing="20">
+        <Text style="-fx-font-size: 24; -fx-font-weight: bold; -fx-padding: 10 20" text="Invite" />
+
+        <Text style="-fx-font-size: 16;" text="Please enter the email of the user you want to invite" />
+
+        <TextField fx:id="emailField" prefHeight="45.0" prefWidth="511.0" promptText="Email" style="-fx-font-size: 16; -fx-padding: 10 20;" />
+
+        <Label text="Please select the group you want to add your friend" />
+
+        <ComboBox fx:id="groupComboBox" prefHeight="25.0" prefWidth="582.0" />
+
+        <Button onAction="#handleInviteButtonAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #FF9800; -fx-text-fill: white;" text="Invite" />
+
+        <Button onAction="#handleBackButtonAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #007BFF; -fx-text-fill: white;" text="Back" />
+
+        <VBox alignment="CENTER" spacing="10" style="-fx-padding: 20;">
+            <Text style="-fx-font-size: 14; -fx-text-fill: #007BFF;" text="Pendent invites:" />
+            <ListView fx:id="inviteList" />
+
+        </VBox>
+
+        <VBox alignment="CENTER" spacing="10" style="-fx-padding: 20;">
+            <Text style="-fx-font-size: 14; -fx-text-fill: #007BFF;" text="Don't have an account? Register now!" />
+        </VBox>
+    </VBox>
+
+</StackPane>

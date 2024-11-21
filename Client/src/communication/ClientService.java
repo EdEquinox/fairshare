@@ -1,5 +1,7 @@
 package communication;
 
+import com.google.gson.JsonObject;
+import model.Invite;
 import com.google.gson.Gson;
 import model.Message;
 import model.ServerResponse;

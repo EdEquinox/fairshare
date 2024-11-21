@@ -1,5 +1,7 @@
 package controller;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import communication.ClientService;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -15,6 +17,10 @@ import utils.AlertUtils;
 import utils.Logger;
 import utils.NavigationManager;
 import utils.Routes;
+
+import java.lang.reflect.Type;
+import java.net.URL;
+import java.util.ArrayList;
 import utils.SharedState;
 import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
@@ -26,15 +32,15 @@ import com.google.gson.Gson;
 public class DashboardController implements Initializable {
 
     public ClientService clientService;
+    Gson gson = new Gson();
+    private ObservableList<Group> groups;
+
     public Text userText;
 
     private User currentUser;
-    private final Gson gson = new Gson();
 
     @FXML
     private ListView<Group> groupList;
-
-    private ObservableList<Group> groups;
 
     public void handleEditProfile() {
         NavigationManager.switchScene(Routes.EDIT_PROFILE);
@@ -65,7 +71,7 @@ public class DashboardController implements Initializable {
     }
 
     public void handleGroupInvites() {
-        // TODO: Handle group invites logic here
+        NavigationManager.switchScene(Routes.INVITE);
     }
 
     public void handleGroupInfo() {

@@ -94,6 +94,20 @@ public class ServerService {
             statement.execute(createUsersGroupsTableSQL);
             Logger.info("Created table: users_groups");
 
+            //Create the group_invites table
+            String createGroupInvitesTableSQL = "CREATE TABLE IF NOT EXISTS group_invites (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "group_id INTEGER NOT NULL, " +
+                    "invited_by INTEGER NOT NULL, " +
+                    "invited_user INTEGER NOT NULL, " +
+                    "status TEXT NOT NULL, " +
+                    "FOREIGN KEY(group_id) REFERENCES groups(id), " +
+                    "FOREIGN KEY(invited_by) REFERENCES users(id), " +
+                    "FOREIGN KEY(invited_user) REFERENCES users(id)" +
+                    ");";
+            statement.execute(createGroupInvitesTableSQL);
+            Logger.info("Created table: group_invites");
+
             // Create the expenses table
             String createExpenseTableSQL = "CREATE TABLE IF NOT EXISTS expenses (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
