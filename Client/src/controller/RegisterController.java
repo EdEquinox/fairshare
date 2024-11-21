@@ -1,19 +1,20 @@
 package controller;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import communication.ClientService;
 import javafx.event.ActionEvent;
 import javafx.fxml.Initializable;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import model.Message;
+import model.ServerResponse;
 import model.User;
 import utils.AlertUtils;
+import utils.Logger;
 import utils.NavigationManager;
 import utils.Routes;
-import utils.Logger;
 
 import java.net.URL;
+import java.util.Base64;
 import java.util.ResourceBundle;
 
 public class RegisterController implements Initializable {
@@ -34,8 +35,7 @@ public class RegisterController implements Initializable {
         String password = passwordField.getText().trim();
         String confirmPassword = confirmPasswordField.getText().trim();
 
-        // Log each field to ensure they're correctly populated
-        Logger.info("Registering with details: Name = " + name + ", Phone = " + phone + ", Email = " + email);
+        Logger.debug("Registering with details: Name = " + name + ", Phone = " + phone + ", Email = " + email);
 
         // Validate fields
         if (name.isEmpty() || phone.isEmpty() || email.isEmpty() || password.isEmpty()) {
@@ -55,23 +55,23 @@ public class RegisterController implements Initializable {
 
         // Send data to server in a new thread to avoid blocking UI
         new Thread(() -> {
-            User user = new User(name, email, phone, password);
+
+            String encodedPassword = Base64.getEncoder().encodeToString(password.getBytes());
+            User user = new User(name, email, phone, encodedPassword);
 
             // Register user and get response
-            String response = clientService.registerUser(user);
+            ServerResponse response = clientService.sendRequest(new Message(Message.Type.REGISTER, user));
 
             // Parse the JSON response
-            JsonObject jsonResponse = JsonParser.parseString(response).getAsJsonObject();
-            String responseData = jsonResponse.get("data").getAsString();
-
             // Run UI updates on the JavaFX Application thread
             javafx.application.Platform.runLater(() -> {
-                if ("SUCCESS".equals(responseData)) {
+                if (response.isSuccess()) {
                     AlertUtils.showSuccess("Registration Successful", "You can now log in with your email and password");
                     NavigationManager.switchScene(Routes.LOGIN); // Navigate to login page
                 } else {
                     // Only show error dialog if there was an actual error message
-                    AlertUtils.showError("Registration Failed", responseData);
+                    Logger.error(response.message());
+                    AlertUtils.showError("Registration Failed", response.message());
                 }
             });
         }).start();

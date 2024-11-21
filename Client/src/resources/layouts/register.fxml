@@ -1,12 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.scene.control.Button?>
-<?import javafx.scene.control.PasswordField?>
-<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.*?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Text?>
-
 <StackPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.RegisterController"
            prefWidth="800" prefHeight="600">
     <!-- VBox to organize elements vertically -->
@@ -22,13 +19,16 @@
         <TextField fx:id="phoneField" promptText="Phone Number" style="-fx-font-size: 16; -fx-padding: 10 20;"/>
         <TextField fx:id="emailField" promptText="Email (Username)" style="-fx-font-size: 16; -fx-padding: 10 20;"/>
         <PasswordField fx:id="passwordField" promptText="Password" style="-fx-font-size: 16; -fx-padding: 10 20;"/>
-        <PasswordField fx:id="confirmPasswordField" promptText="Confirm Password" style="-fx-font-size: 16; -fx-padding: 10 20;"/>
+        <PasswordField fx:id="confirmPasswordField" promptText="Confirm Password"
+                       style="-fx-font-size: 16; -fx-padding: 10 20;"/>
 
         <!-- Register button -->
-        <Button text="Register" onAction="#handleRegisterAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #FF9800; -fx-text-fill: white;"/>
+        <Button text="Register" onAction="#handleRegisterAction"
+                style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #FF9800; -fx-text-fill: white;"/>
 
         <!-- Back button to navigate to previous screen -->
-        <Button text="Back" onAction="#handleBackAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #007BFF; -fx-text-fill: white;"/>
+        <Button text="Back" onAction="#handleBackAction"
+                style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #007BFF; -fx-text-fill: white;"/>
 
         <!-- Footer with the message -->
         <VBox alignment="CENTER" spacing="10" style="-fx-padding: 20;">
