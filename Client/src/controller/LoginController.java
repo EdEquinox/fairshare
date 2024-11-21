@@ -1,17 +1,20 @@
 package controller;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.gson.Gson;
 import communication.ClientService;
 import javafx.fxml.Initializable;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import model.Message;
+import model.ServerResponse;
+import model.User;
 import utils.AlertUtils;
-import utils.NavigationManager;
 import utils.Logger;
+import utils.NavigationManager;
 import utils.Routes;
 
 import java.net.URL;
+import java.util.Base64;
 import java.util.ResourceBundle;
 
 public class LoginController implements Initializable {
@@ -23,7 +26,6 @@ public class LoginController implements Initializable {
 
     /**
      * Handles the login action when the user clicks the login button.
-     *
      */
     public void handleLoginAction() {
         // Validate inputs
@@ -68,30 +70,23 @@ public class LoginController implements Initializable {
      * @param password the password entered by the user
      */
     private void processLogin(String email, String password) {
-        Logger.info("Sending login request to the server for email: " + email);
+        Logger.debug("Sending login request to the server for email: " + email);
 
-        String response = clientService.loginUser(email, password);
-        handleServerResponse(response);
-    }
+        // Encrypt password:
+        Base64.Encoder encoder = Base64.getEncoder();
+        String encryptedPassword = encoder.encodeToString(password.getBytes());
 
-    /**
-     * Handles the server response for the login request.
-     *
-     * @param response the server's JSON response as a string
-     */
-    private void handleServerResponse(String response) {
+        ServerResponse response = clientService.sendRequest(new Message(Message.Type.LOGIN, new User(null, email, null, encryptedPassword)));
         try {
-            JsonObject jsonResponse = JsonParser.parseString(response).getAsJsonObject();
-            String responseData = jsonResponse.get("data").getAsString();
-
             javafx.application.Platform.runLater(() -> {
-                if ("SUCCESS".equals(responseData)) {
+                if (response.isSuccess()) {
                     Logger.info("Login successful for user.");
-                    AlertUtils.showSuccess("Login Successful", "Welcome back!");
+                    User user = new Gson().fromJson(response.payload().toString(), User.class);
+                    clientService.setCurrentUser(user);
                     NavigationManager.switchScene(Routes.DASHBOARD);
                 } else {
-                    Logger.error("Login failed: " + responseData);
-                    AlertUtils.showError("Login Failed", responseData);
+                    Logger.error("Login failed: " + response.message());
+                    AlertUtils.showError("Login Failed", response.message());
                 }
             });
         } catch (Exception e) {
@@ -104,7 +99,6 @@ public class LoginController implements Initializable {
 
     /**
      * Handles the back action when the user clicks the back button.
-     *
      */
     public void handleBackAction() {
         NavigationManager.switchScene(Routes.HOME);

@@ -1,7 +1,5 @@
 package model;
 
-import java.util.List;
-
 public class User {
     private int id;
     private String name;
@@ -27,6 +25,7 @@ public class User {
     public String getName() {
         return name;
     }
+
     public void setName(String name) {
         this.name = name;
     }

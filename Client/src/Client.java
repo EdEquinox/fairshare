@@ -14,24 +14,6 @@ public class Client extends Application {
     private static String serverHost;
     private static int serverPort;
 
-    @Override
-    public void start(Stage primaryStage) throws IOException {
-
-        NavigationManager.initialize(primaryStage);
-
-        // TODO: Check if using Singleton is good practice
-        ClientService.initialize(serverHost, serverPort);
-
-        NavigationManager.switchScene(Routes.HOME);
-
-        primaryStage.setTitle("Home Page");
-        primaryStage.setMaxWidth(800);
-        primaryStage.setMaxHeight(600);
-        primaryStage.setMinWidth(800);
-        primaryStage.setMinHeight(600);
-        primaryStage.show();
-    }
-
     public static void main(String[] args) {
         // Check if correct number of arguments is provided
         if (args.length != 2) {
@@ -50,5 +32,23 @@ public class Client extends Application {
 
         // Launch the JavaFX application
         launch(args);
+    }
+
+    @Override
+    public void start(Stage primaryStage) throws IOException {
+
+        NavigationManager.initialize(primaryStage);
+
+        // TODO: Check if using Singleton is good practice
+        ClientService.initialize(serverHost, serverPort);
+
+        NavigationManager.switchScene(Routes.HOME);
+
+        primaryStage.setTitle("Home Page");
+        primaryStage.setMaxWidth(800);
+        primaryStage.setMaxHeight(600);
+        primaryStage.setMinWidth(800);
+        primaryStage.setMinHeight(600);
+        primaryStage.show();
     }
 }
