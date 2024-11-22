@@ -13,21 +13,12 @@ import model.Group;
 import model.Message;
 import model.ServerResponse;
 import model.User;
-import utils.AlertUtils;
-import utils.Logger;
-import utils.NavigationManager;
-import utils.Routes;
+import utils.*;
 
-import java.lang.reflect.Type;
-import java.net.URL;
-import java.util.ArrayList;
-import utils.SharedState;
-import com.google.gson.reflect.TypeToken;
 import java.lang.reflect.Type;
 import java.net.URL;
 import java.util.List;
 import java.util.ResourceBundle;
-import com.google.gson.Gson;
 
 public class DashboardController implements Initializable {
 
@@ -67,6 +58,7 @@ public class DashboardController implements Initializable {
     public void handleSelectGroup(Group selectedGroup) {
         //Guarda o grupo selecionado no sharedState
         SharedState.setSelectedGroup(selectedGroup);
+        // TODO -> 1. Arranjar maneira de passar o ID do Grupo para o controller! (Injeção)
         NavigationManager.switchScene(Routes.GROUP);
     }
 
@@ -88,7 +80,8 @@ public class DashboardController implements Initializable {
                     if (response.isSuccess()) {
                         try {
                             // TypeToken captura o tipo genérico List<Group> para a desserialização com Gson; getType devolve o tipo List<Group>
-                            Type groupListType = new TypeToken<List<Group>>() {}.getType();
+                            Type groupListType = new TypeToken<List<Group>>() {
+                            }.getType();
                             // Converte o payload da resposta para JSON e desserializa-o para uma lista de objetos do tipo Group
                             List<Group> fetchedGroups = gson.fromJson(gson.toJson(response.payload()), groupListType);
                             // Atualiza a ObservableList "groups" com os novos grupos

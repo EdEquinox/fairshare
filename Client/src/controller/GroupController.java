@@ -22,6 +22,8 @@ import com.google.gson.reflect.TypeToken;
 
 import java.util.List;
 
+// TODO: Fazer o respetivo código da UI e enviar o necessário para a DB
+
 public class GroupController {
 
     @FXML

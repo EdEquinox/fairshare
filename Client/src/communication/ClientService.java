@@ -1,8 +1,6 @@
 package communication;
 
-import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
-import model.Invite;
 import com.google.gson.Gson;
 import model.Message;
 import model.ServerResponse;
