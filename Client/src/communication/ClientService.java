@@ -1,6 +1,7 @@
 package communication;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonSyntaxException;
 import model.Invite;
 import com.google.gson.Gson;
 import model.Message;
@@ -92,12 +93,22 @@ public class ClientService {
     private ServerResponse receiveResponse() {
         try {
             if (in != null) {
-                return gson.fromJson(in.readLine(), ServerResponse.class);
+                String line = in.readLine();
+                if (line == null || line.isBlank()) {
+                    Logger.error("Received empty or null response from server.");
+                    return null; // Pode ser personalizado para lançar exceção ou retornar outro valor.
+                }
+
+                try {
+                    return gson.fromJson(line, ServerResponse.class);
+                } catch (JsonSyntaxException e) {
+                    Logger.error("Error parsing JSON response: " + e.getMessage());
+                }
             }
         } catch (IOException e) {
             Logger.error("Error receiving message: " + e.getMessage());
         }
-        return null;
+        return null; // Retornar null se ocorrer erro ou resposta inválida
     }
 
     public ServerResponse sendRequest(Message message) {

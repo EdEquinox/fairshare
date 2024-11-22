@@ -7,13 +7,40 @@ public class User {
     private String phone;
     private String password;
 
-    public User(String name, String email, String phoneNumber, String password) {
+    public User(int id, String name, String email, String phone, String password) {
+        this.id = id;
         this.name = name;
         this.email = email;
-        this.phone = phoneNumber;
+        this.phone = phone;
         this.password = password;
     }
 
+    // Authenticated User
+    public User(int id, String name, String email, String phone) {
+        this.id = id;
+        this.name = name;
+        this.email = email;
+        this.phone = phone;
+    }
+
+    // Create new User
+    public User(String name, String email, String phone, String password) {
+        this.name = name;
+        this.email = email;
+        this.phone = phone;
+        this.password = password;
+    }
+
+    // Authenticate User
+    public User(String email, String password) {
+        this.email = email;
+        this.password = password;
+    }
+
+    public User() {
+    }
+
+    // Getters e Setters
     public int getId() {
         return id;
     }
@@ -54,4 +81,8 @@ public class User {
         this.password = password;
     }
 
+    @Override
+    public String toString() {
+        return "User{" + "id=" + id + ", name='" + name + '\'' + ", email='" + email + '\'' + ", phone='" + phone + '\'' + '}';
+    }
 }

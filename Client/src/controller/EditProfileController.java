@@ -55,16 +55,18 @@ public class EditProfileController implements Initializable {
         String name = nameField.getText().trim();
         String email = currentUser.getEmail();
         String phone = phoneField.getText().trim();
-        String password = Base64.getEncoder().encodeToString(passwordField.getText().trim().getBytes());
+        String password = passwordField.getText().trim();
 
         if (name.isEmpty() || email.isEmpty() || phone.isEmpty() || password.isEmpty()) {
             AlertUtils.showError("Invalid Fields", "Please fill in all fields.");
             return;
         }
 
+        String encodedPassword = Base64.getEncoder().encodeToString(password.getBytes());
+
         // Send updated profile to server
         new Thread(() -> {
-            ServerResponse response = clientService.sendRequest(new Message(Message.Type.EDIT_PROFILE, new User(name, email, phone, password)));
+            ServerResponse response = clientService.sendRequest(new Message(Message.Type.EDIT_PROFILE, new User(currentUser.getId(), name, email, phone, encodedPassword)));
 
             javafx.application.Platform.runLater(() -> {
                 if (response.isSuccess()) {

@@ -367,16 +367,19 @@ public class ClientHandler implements Runnable {
     }
 
     private void handleEditProfile(User user) throws IOException {
-
         String url = "jdbc:sqlite:" + databasePath;
-        String updateSQL = "UPDATE users WHERE id = ?";
+        String updateSQL = "UPDATE users SET name = ?, email = ?, phone = ?, password = ? WHERE id = ?";
 
         boolean isSuccess = false;
         String message;
 
         try (Connection conn = DriverManager.getConnection(url); PreparedStatement stmt = conn.prepareStatement(updateSQL)) {
-
-            stmt.setString(1, String.valueOf(user.getId()));
+            // Set the parameters for the query
+            stmt.setString(1, user.getName());
+            stmt.setString(2, user.getEmail());
+            stmt.setString(3, user.getPhone());
+            stmt.setString(4, user.getPassword());
+            stmt.setInt(5, user.getId());
 
             int rowsAffected = stmt.executeUpdate();
             if (rowsAffected > 0) {
@@ -384,8 +387,8 @@ public class ClientHandler implements Runnable {
                 message = "User profile updated successfully";
                 Logger.info("User profile updated successfully for email: " + user.getEmail());
             } else {
-                message = "Incorrect password!";
-                Logger.error("Incorrect password: " + user.getEmail());
+                message = "User not found!";
+                Logger.error("No user found with ID: " + user.getId());
             }
         } catch (SQLException e) {
             message = "Error while editing profile";
@@ -393,7 +396,6 @@ public class ClientHandler implements Runnable {
         }
 
         sendResponse(new ServerResponse(isSuccess, message, null));
-
     }
 
     private void handleGetProfile(User user) throws IOException {
@@ -410,7 +412,7 @@ public class ClientHandler implements Runnable {
             ResultSet rs = stmt.executeQuery();
 
             if (rs.next()) {
-                retrievedUser = new User(rs.getString("name"), rs.getString("email"), rs.getString("phone"), null);
+                retrievedUser = new User(0, rs.getString("name"), rs.getString("email"), rs.getString("phone"), null);
                 isSuccess = true;
                 message = "User retrieved successfully";
             } else {
@@ -469,8 +471,15 @@ public class ClientHandler implements Runnable {
 
     private void handleLogin(User user) throws IOException {
 
+        if (user == null || user.getEmail() == null || user.getEmail().isBlank() ||
+                user.getPassword() == null || user.getPassword().isBlank()) {
+            Logger.error("Invalid login credentials provided.");
+            sendResponse(new ServerResponse(false, "Invalid login credentials.", null));
+            return;
+        }
+
         String url = "jdbc:sqlite:" + databasePath;
-        String querySQL = "SELECT * FROM users WHERE email = ? AND password = ?";
+        String querySQL = "SELECT * FROM users WHERE email = ?";
 
         boolean isSuccess = false;
         String message;
@@ -478,25 +487,29 @@ public class ClientHandler implements Runnable {
 
         try (Connection conn = DriverManager.getConnection(url); PreparedStatement stmt = conn.prepareStatement(querySQL)) {
 
-            // Set the parameters for the query
+            // Set the parameter for the query
             stmt.setString(1, user.getEmail());
-            stmt.setString(2, user.getPassword());
 
             // Execute the query and check if a matching record exists
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
-                authenticatedUser = new User(rs.getString("name"), rs.getString("email"), rs.getString("phone"), null);
-                authenticatedUser.setId(rs.getInt("id"));
-                Logger.info("User authenticated successfully: " + user.getEmail());
-                message = "User authenticated successfully";
-                isSuccess = true;
+                // TODO: Validate password (use BCrypt or another secure method if hashing is implemented)
+                if (rs.getString("password").equals(user.getPassword())) {
+                    isSuccess = true;
+                    authenticatedUser = new User(rs.getInt("id"), rs.getString("name"), rs.getString("email"), rs.getString("phone"));
+                    Logger.info("User authenticated successfully: " + authenticatedUser.getEmail());
+                    message = "User authenticated successfully";
+                } else {
+                    Logger.error("Authentication failed for email: " + user.getEmail());
+                    message = "Authentication failed";
+                }
             } else {
                 Logger.error("Authentication failed for email: " + user.getEmail());
                 message = "Authentication failed";
             }
         } catch (SQLException e) {
             Logger.error("Database error during authentication: " + e.getMessage());
-            message = "Error while authenticating...";
+            message = "An internal server error occurred.";
         }
 
         ServerResponse response = new ServerResponse(isSuccess, message, authenticatedUser);
