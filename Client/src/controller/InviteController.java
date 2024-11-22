@@ -16,8 +16,6 @@ import utils.Routes;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Objects;
 
 public class InviteController {
 

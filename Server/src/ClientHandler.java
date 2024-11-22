@@ -80,9 +80,10 @@ public class ClientHandler implements Runnable {
                             ArrayList<Object> payload = gson.fromJson(gson.toJson(message.payload()), payloadType);
                             Type groupType = new TypeToken<Group>() {}.getType();
                             Type userType = new TypeToken<User>() {}.getType();
-                            Group group = gson.fromJson(gson.toJson(payload.get(0)), groupType);
-                            User user = gson.fromJson(gson.toJson(payload.get(1)), userType);
-                            sendInvite(user, group);
+                            Group group = gson.fromJson(gson.toJson(payload.get(0)), Group.class);
+                            User user = gson.fromJson(gson.toJson(payload.get(1)), User.class);
+                            String email = gson.fromJson(gson.toJson(payload.get(2)), String.class);
+                            sendInvite(user, group, email);
                         }
                         case Message.Type.GET_USERS_FOR_GROUP -> {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
@@ -503,7 +504,7 @@ public class ClientHandler implements Runnable {
         sendResponse(response);
     }
 
-    private void sendInvite(User user, Group group) {
+    private void sendInvite(User user, Group group, String email) {
         String url = "jdbc:sqlite:" + databasePath;
         String checkInviteeSQL = "SELECT COUNT(*) FROM users WHERE email = ?";
         String checkGroupSQL = "SELECT COUNT(*) FROM groups WHERE id = ?";
@@ -512,11 +513,12 @@ public class ClientHandler implements Runnable {
         try (Connection conn = DriverManager.getConnection(url)) {
             // Check if the invitee email exists
             try (PreparedStatement checkInviteeStmt = conn.prepareStatement(checkInviteeSQL)) {
-                checkInviteeStmt.setString(1, user.getEmail());
+                checkInviteeStmt.setString(1, email);
                 ResultSet rs = checkInviteeStmt.executeQuery();
                 if (!rs.next() || rs.getInt(1) == 0) {
                     Logger.error("Invitee email not found in the database: " + user.getEmail());
                     sendResponse(new ServerResponse(false, "Error: Invitee email not found", null));
+                    return;
                 }
                 Logger.info("Invitee email found in the database: " + user.getEmail());
             }
@@ -528,14 +530,47 @@ public class ClientHandler implements Runnable {
                 if (!rs.next() || rs.getInt(1) == 0) {
                     Logger.error("Group not found in the database: " + group.getName());
                     sendResponse(new ServerResponse(false, "Error: Group not found", null));
+                    return;
                 }
                 Logger.info("Group found in the database: " + group.getName());
+            }
+
+            //Get invitee user
+            String getUserSQL = "SELECT id, name FROM users WHERE email = ?";
+            User invitee = new User("", email, "", "");
+            try (PreparedStatement getUserStmt = conn.prepareStatement(getUserSQL)) {
+                getUserStmt.setString(1, email);
+                ResultSet rs = getUserStmt.executeQuery();
+                if (rs.next()) {
+                    invitee.setId(rs.getInt("id"));
+                    invitee.setEmail(email);
+                    invitee.setName(rs.getString("name"));
+                    Logger.info("User found in the database: " + invitee.getName());
+                } else {
+                    Logger.error("User not found in the database: " + invitee.getName());
+                    sendResponse(new ServerResponse(false, "Error: User not found", null));
+                    return;
+                }
+            }
+
+            // Check if the invitee is already a member of the group
+            String checkUserGroupSQL = "SELECT COUNT(*) FROM users_groups WHERE user_id = ? AND group_id = ?";
+            try (PreparedStatement checkUserGroupStmt = conn.prepareStatement(checkUserGroupSQL)) {
+                checkUserGroupStmt.setInt(1, invitee.getId());
+                checkUserGroupStmt.setInt(2, group.getId());
+                ResultSet rs = checkUserGroupStmt.executeQuery();
+                if (rs.next() && rs.getInt(1) > 0) {
+                    Logger.error("User is already a member of the group: " + group.getName());
+                    sendResponse(new ServerResponse(false, "Error: User is already a member of the group", null));
+                    return;
+                }
+                Logger.info("User is not a member of the group: " + user.getName());
             }
 
             // Insert the invite
             try (PreparedStatement insertStmt = conn.prepareStatement(insertSQL)) {
                 insertStmt.setInt(1, group.getOwnerId());
-                insertStmt.setInt(2, user.getId());
+                insertStmt.setInt(2, invitee.getId());
                 insertStmt.setInt(3, user.getId());
                 insertStmt.executeUpdate();
                 Logger.info("Invite sent successfully");
