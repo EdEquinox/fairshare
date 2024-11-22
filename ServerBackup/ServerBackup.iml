@@ -10,5 +10,8 @@
     <orderEntry type="library" exported="" name="javafx-swt" level="project" />
     <orderEntry type="library" exported="" name="gson-2.10.1" level="project" />
     <orderEntry type="library" exported="" name="sqlite-jdbc-3.47.0.0" level="project" />
+    <orderEntry type="library" exported="" name="javafx" level="application" />
+    <orderEntry type="library" name="github.javaxcel.core" level="project" />
+    <orderEntry type="library" name="sun.mail.javax" level="project" />
   </component>
 </module>

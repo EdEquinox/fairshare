@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="controller.GroupController">
+
+    <VBox spacing="10" alignment="TOP_CENTER" AnchorPane.topAnchor="10" AnchorPane.bottomAnchor="10"
+          AnchorPane.leftAnchor="10" AnchorPane.rightAnchor="10">
+        <!-- Title -->
+        <Label text="Group Page" style="-fx-font-size: 20; -fx-font-weight: bold;" alignment="CENTER"/>
+
+        <!-- SplitPane for Group List and User List -->
+        <SplitPane dividerPositions="0.5" VBox.vgrow="ALWAYS">
+            <!-- Group List -->
+            <ListView fx:id="groupListView" style="-fx-background-color: #ffffff;" VBox.vgrow="ALWAYS"/>
+
+            <!-- Users in Selected Group -->
+            <VBox spacing="5" alignment="TOP_CENTER" VBox.vgrow="ALWAYS">
+                <Label text="Users in Selected Group" style="-fx-font-size: 16; -fx-font-weight: bold;" alignment="CENTER"/>
+                <ListView fx:id="userListView" style="-fx-background-color: #ffffff;" VBox.vgrow="ALWAYS"/>
+            </VBox>
+        </SplitPane>
+
+        <!-- Buttons -->
+        <HBox spacing="10" alignment="CENTER">
+            <Button text="Expenses" onAction="#handleGoToExpensesPage" style="-fx-font-size: 16;"/>
+            <Button text="Back" onAction="#handleGoToDashboard" style="-fx-font-size: 16;"/>
+        </HBox>
+    </VBox>
+</AnchorPane>

@@ -23,6 +23,8 @@ public class Server {
 
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             Logger.info("Server started. Listening on port " + port);
+            Logger.info("Database path: " + dbPath);
+            Logger.info("Server running on ip: " + serverSocket.getInetAddress().getHostAddress());
 
             // Initialize ServerService to handle database setup
             ServerService serverService = new ServerService(dbPath, serverSocket);

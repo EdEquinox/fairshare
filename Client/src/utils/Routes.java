@@ -6,4 +6,8 @@ public enum Routes {
     LOGIN,
     EDIT_PROFILE,
     DASHBOARD,
+    CREATE_GROUP,
+    GROUP,
+    EXPENSES,
+    INVITE,
 }

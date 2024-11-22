@@ -1,28 +1,32 @@
 package communication;
 
 import com.google.gson.JsonObject;
+import model.Invite;
+import com.google.gson.Gson;
 import model.Message;
+import model.ServerResponse;
 import model.User;
 import utils.Logger;
-import com.google.gson.Gson;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.Socket;
 
 public class ClientService {
 
+    private static final Gson gson = new Gson();
+    private static final int MAX_RETRIES = 5;
+    private static final long RETRY_DELAY_MILLIS = 5000;
     private static ClientService instance;
-
     private final String serverIp;
     private final int serverPort;
+    private User currentUser;
     private Socket socket;
     private PrintWriter out;
     private BufferedReader in;
-    private static final Gson gson = new Gson();
     private boolean isConnected = false;
-
-    private static final int MAX_RETRIES = 5;
-    private static final long RETRY_DELAY_MILLIS = 5000;
 
     // Private constructor to prevent instantiation
     public ClientService(String serverIp, int serverPort) {
@@ -82,12 +86,13 @@ public class ClientService {
 
     /**
      * Receives a message from the server.
+     *
      * @return The message received, or null if an error occurs.
      */
-    public String receiveMessage() {
+    private ServerResponse receiveResponse() {
         try {
             if (in != null) {
-                return in.readLine();
+                return gson.fromJson(in.readLine(), ServerResponse.class);
             }
         } catch (IOException e) {
             Logger.error("Error receiving message: " + e.getMessage());
@@ -95,57 +100,29 @@ public class ClientService {
         return null;
     }
 
-
-
-    public String registerUser(User user) {
-        return sendRequest(new Message(Message.Type.REGISTER, user));
-    }
-
-    public String loginUser(String email, String password) {
-        return sendRequest(new Message(Message.Type.LOGIN, new User(email, password, null, null)));
-    }
-
-    public String getUserProfile(String email) {
-        return sendRequest(new Message(Message.Type.GET_PROFILE, new User(email, null, null, null)));
-    }
-
-    /**
-     * Helper method to create error responses in JSON format.
-     * @param message The error message.
-     * @return A JSON string containing the error response.
-     */
-    private String createErrorResponse(String message) {
-        JsonObject errorResponse = new JsonObject();
-        errorResponse.addProperty("type", "response");
-        errorResponse.addProperty("data", message);
-        return errorResponse.toString();
-    }
-
-    public String sendRequest(Message message) {
+    public ServerResponse sendRequest(Message message) {
         try {
             if (socket == null || socket.isClosed()) {
                 if (!connectToServer()) {
-                    return createErrorResponse("Error: Unable to connect to server");
+                    return new ServerResponse(false, "Unable to connect to server", null);
                 }
             }
 
-            JsonObject request = new JsonObject();
-            request.addProperty("timeStamp", System.currentTimeMillis());
-            request.addProperty("type", message.type().toString());
-            request.addProperty("message", gson.toJson(message.payload()));
+            String jsonMessage = gson.toJson(message);
 
             if (out != null) {
-                out.println(request);
+                out.println(jsonMessage);
                 out.flush();
-                Logger.info("Sent message to server: " + request);
+                Logger.info("Sent message to server: " + jsonMessage);
             } else {
-                Logger.error("Attempted to send message, but output stream is not initialized.");
+                Logger.error("Output stream is not initialized.");
+                return new ServerResponse(false, "Output stream is not initialized", null);
             }
 
-            return receiveMessage();
+            return receiveResponse();
         } catch (Exception e) {
             Logger.error("Error during command execution: " + e.getMessage());
-            return createErrorResponse("Error: " + e.getMessage());
+            return new ServerResponse(false, "Error during command execution: " + e.getMessage(), null);
         }
     }
 
@@ -171,6 +148,11 @@ public class ClientService {
     }
 
 
+    public User getCurrentUser() {
+        return this.currentUser;
+    }
 
-
+    public void setCurrentUser(User currentUser) {
+        this.currentUser = currentUser;
+    }
 }

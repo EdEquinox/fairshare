@@ -1,17 +1,19 @@
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.gson.reflect.TypeToken;
+import com.google.gson.Gson;
+import model.*;
 import utils.Logger;
 import com.google.gson.Gson;
-import model.Message;
-import model.User;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.lang.reflect.Type;
 import java.net.Socket;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.ResultSet;
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.HashSet;
 
 public class ClientHandler implements Runnable {
     private final Socket clientSocket;
@@ -35,26 +37,68 @@ public class ClientHandler implements Runnable {
             while ((command = in.readLine()) != null) {
                 Logger.info("Received command: " + command);
 
-                switch (command) {
-                    case "REGISTER":
-                        handleRegister();
-                        break;
-                    case "LOGIN":
-                        handleLogin();
-                        break;
-                    case "LOGOUT":
-                        handleLogout();
-                        break;
-                    case "EDIT_PROFILE":
-                        handleEditProfile();
-                        break;
-                    case "GET_PROFILE":
-                        handleGetProfile();
-                        break;
-
-                    default:
-                        handleUnknownCommand();
+                try {
+                    Message message = gson.fromJson(command, Message.class); // Parseia diretamente o comando JSON
+                    Logger.info("Received message: " + message);
+                    Logger.info("Message type: " + message.type());
+                    switch (message.type()) {
+                        case Message.Type.REGISTER -> {
+                            User user = gson.fromJson(gson.toJson(message.payload()), User.class);
+                            handleRegister(user);
+                        }
+                        case Message.Type.LOGIN -> {
+                            User user = gson.fromJson(gson.toJson(message.payload()), User.class);
+                            handleLogin(user);
+                        }
+                        case Message.Type.LOGOUT -> {
+                            User user = gson.fromJson(gson.toJson(message.payload()), User.class);
+                            handleLogout(user);
+                        }
+                        case Message.Type.EDIT_PROFILE -> {
+                            User user = gson.fromJson(gson.toJson(message.payload()), User.class);
+                            handleEditProfile(user);
+                        }
+                        case Message.Type.GET_PROFILE -> {
+                            User user = gson.fromJson(gson.toJson(message.payload()), User.class);
+                            handleGetProfile(user);
+                        }
+                        case Message.Type.CREATE_GROUP -> {
+                            Group group = gson.fromJson(gson.toJson(message.payload()), Group.class);
+                            handleCreateGroup(group);
+                        }
+                        case Message.Type.GET_GROUPS -> {
+                            Logger.info("Fetching groups...");
+                            User user = gson.fromJson(gson.toJson(message.payload()), User.class);
+                            handleGetGroups(user);
+                        }
+                        case Message.Type.GET_PENDING_INVITES  -> {
+                            User user = gson.fromJson(gson.toJson(message.payload()), User.class);
+                            handleGetInvites(user);
+                        }
+                        case Message.Type.INVITE -> {
+                            Type payloadType = new TypeToken<ArrayList<Object>>() {}.getType();
+                            ArrayList<Object> payload = gson.fromJson(gson.toJson(message.payload()), payloadType);
+                            Type groupType = new TypeToken<Group>() {}.getType();
+                            Type userType = new TypeToken<User>() {}.getType();
+                            Group group = gson.fromJson(gson.toJson(payload.get(0)), groupType);
+                            User user = gson.fromJson(gson.toJson(payload.get(1)), userType);
+                            sendInvite(user, group);
+                        }
+                        case Message.Type.GET_USERS_FOR_GROUP -> {
+                            Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
+                            handleGetUsersForGroup(group);
+                        }
+                        case Message.Type.GET_EXPENSES -> {
+                            Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
+                            handleGetExpenses(group);
+                        }
+                        default -> sendResponse(new ServerResponse(false, "Invalid command", null));
+                    }
+                } catch (Exception e) {
+                    Logger.error("Error receiving message: " + e.getMessage());
+                    sendResponse(new ServerResponse(false, "Internal Server Error...", null));
                 }
+
             }
         } catch (IOException e) {
             Logger.error("Error handling client: " + e.getMessage());
@@ -70,11 +114,247 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    private void handleGetExpenses(Group group) {
+        // Query que seleciona as expenses de um determinado grupo pelo id e ordenado pelas datas
+        String query = "SELECT id, group_id, paid_by, amount, description, date " +
+                "FROM expenses WHERE group_id = ? ORDER BY date ASC";
 
-    private void handleLogout() {
+        boolean isSuccess = false;
+        String message;
+        List<Expense> expenses = new ArrayList<>();
+
+        // conecta à base de dados
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, group.getId()); // Usa o id do grupo passado como parametro
+            ResultSet rs = stmt.executeQuery();
+            // executa a query e em quanto tiver mais expenses continua a adicionar
+            while (rs.next()) {
+                expenses.add(new Expense(
+                        rs.getInt("id"),
+                        rs.getInt("group_id"),
+                        rs.getInt("paid_by"),
+                        rs.getDouble("amount"),
+                        rs.getString("description"),
+                        rs.getString("date")
+                ));
+            }
+            // verifica se a lista esta vazia
+            if (expenses.isEmpty()) {
+                message = "No expenses found for the group.";
+                Logger.info("No expenses found for group: " + group.name());
+            } else {
+                isSuccess = true;
+                message = "Expenses retrieved successfully.";
+                Logger.info("Expenses retrieved for group: " + group.name());
+            }
+
+        } catch (SQLException e) {
+            message = "Error while retrieving expenses.";
+            Logger.error("Database error while fetching expenses: " + e.getMessage());
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, expenses));
+    }
+
+
+
+    private void handleGetUsersForGroup(Group group) {
+        // query que utiliza a tabela conjuta de users e grupos para devolver os users de um determinado grupo
+        String query = "SELECT u.name " +
+                "FROM users u " +
+                "JOIN users_groups ug ON u.id = ug.user_id " +
+                "WHERE ug.group_id = ?";
+
+        boolean isSuccess = false;
+        String message;
+        List<String> users = new ArrayList<>();
+
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, group.getId()); // usa o id do grupo
+            ResultSet rs = stmt.executeQuery();
+            // adiciona os nomes dos grupos enquanto existirem mais
+            while (rs.next()) {
+                users.add(rs.getString("name"));
+            }
+
+            if (users.isEmpty()) {
+                message = "No users found for the group.";
+                Logger.info("No users found for group: " + group.name());
+            } else {
+                isSuccess = true;
+                message = "Users retrieved successfully.";
+                Logger.info("Users retrieved for group: " + group.name());
+            }
+
+        } catch (SQLException e) {
+            message = "Error while retrieving users.";
+            Logger.error("Database error while fetching users: " + e.getMessage());
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, users));
+    }
+
+
+
+    private void handleGetGroups(User user) {
+
+        // verificaçao no caso do user ser null ou o id ser menor ou igual a 0
+        if (user == null || user.getId() <= 0) {
+            Logger.error("Invalid user data received for GET_GROUPS: " + user);
+            sendResponse(new ServerResponse(false, "Invalid user data.", null));
+            return;
+        }
+
+        // query que seleciona os grupos relacionados a um determinado user_id
+        String url = "jdbc:sqlite:" + databasePath;
+        String query = "SELECT g.id, g.name, ug.user_id AS owner_id " +
+                "FROM groups g " +
+                "JOIN users_groups ug ON g.id = ug.group_id " +
+                "WHERE ug.user_id = ?";
+
+        boolean isSuccess = false;
+        String message;
+        List<Group> groups = new ArrayList<>();
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, user.getId());
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                groups.add(new Group(
+                        rs.getInt("id"),
+                        rs.getString("name"),
+                        rs.getInt("owner_id")
+                ));
+            }
+
+            if (groups.isEmpty()) {
+                message = "No groups found for the user.";
+                Logger.info("No groups found for user ID: " + user.getId());
+            } else {
+                isSuccess = true;
+                message = "Groups retrieved successfully.";
+                Logger.info("Groups retrieved for user ID: " + user.getId() + ": " + groups);
+            }
+
+        } catch (SQLException e) {
+            message = "Error while retrieving groups.";
+            Logger.error("Database error while fetching groups: " + e.getMessage());
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, groups));
+    }
+
+
+
+
+
+    private void handleCreateGroup(Group group) {
+        String url = "jdbc:sqlite:" + databasePath;
+
+        // SQL para verificar se o grupo já existe
+        String checkGroupSQL = "SELECT id FROM groups WHERE name = ?";
+
+        // SQL para inserir um novo grupo
+        String insertGroupSQL = "INSERT INTO groups (name) VALUES (?)";
+
+        // SQL para associar o usuário ao grupo
+        String insertUserGroupSQL = "INSERT INTO users_groups (user_id, group_id) VALUES (?, ?)";
+
+        boolean isSuccess = false;
+        String message;
+        Group createdGroup = null;
+
+        try (Connection conn = DriverManager.getConnection(url)) {
+            conn.setAutoCommit(false);
+
+            int groupId;
+
+            // Verificar se o grupo já existe
+            try (PreparedStatement checkStmt = conn.prepareStatement(checkGroupSQL)) {
+                checkStmt.setString(1, group.name());
+                ResultSet rs = checkStmt.executeQuery();
+                if (rs.next()) {
+                    groupId = rs.getInt("id");
+                    Logger.info("Group already exists: " + group.name());
+                    message = "Group already exists";
+                } else {
+                    try (PreparedStatement insertGroupStmt = conn.prepareStatement(insertGroupSQL, Statement.RETURN_GENERATED_KEYS)) {
+                        insertGroupStmt.setString(1, group.name());
+                        insertGroupStmt.executeUpdate();
+
+                        try (ResultSet generatedKeys = insertGroupStmt.getGeneratedKeys()) {
+                            if (generatedKeys.next()) {
+                                groupId = generatedKeys.getInt(1);
+                                Logger.info("Group created successfully: " + group.name());
+                            } else {
+                                throw new SQLException("Failed to retrieve group ID after insertion");
+                            }
+                        }
+                    }
+                }
+            }
+
+            try (PreparedStatement insertUserGroupStmt = conn.prepareStatement(insertUserGroupSQL)) {
+                insertUserGroupStmt.setInt(1, group.ownerId());
+                insertUserGroupStmt.setInt(2, groupId);
+                insertUserGroupStmt.executeUpdate();
+                Logger.info("User associated with group: User ID " + group.ownerId() + ", Group ID " + groupId);
+            }
+
+            conn.commit();
+            isSuccess = true;
+            message = "Group created successfully";
+        } catch (SQLException e) {
+            Logger.error("Error creating group or associating user: " + e.getMessage());
+            message = "Error creating group or associating user";
+            isSuccess = false;
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, null));
+    }
+
+    private void handleGetInvites(User user) {
+
+        boolean isSuccess = false;
+        String message;
+        ArrayList<Group> invites = new ArrayList<Group>();
+
+        String url = "jdbc:sqlite:" + databasePath;
+        String querySQL = "SELECT g.name, g.id " + "FROM group_invites gi " + "JOIN groups g ON gi.group_id = g.id " + "WHERE gi.invited_user = ?";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement stmt = conn.prepareStatement(querySQL)) {
+
+            stmt.setInt(1, user.getId());
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                invites.add(new Group(rs.getString("name"), rs.getInt("id")));
+            }
+
+            isSuccess = true;
+            message = "Invites fetched successfully";
+
+        } catch (SQLException e) {
+            Logger.error("Database error while fetching invites: " + e.getMessage());
+            message = "Database error while fetching invites";
+            isSuccess = false;
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, invites));
+    }
+
+    private void handleLogout(User user) {
         try {
             Logger.info("User requested logout. Closing connection.");
-            sendResponse(createJsonResponse("response", "SUCCESS"));
+            // sendResponse(createJsonResponse("response", "SUCCESS"));
 
             // Close the server-side socket connection
             if (clientSocket != null && !clientSocket.isClosed()) {
@@ -86,142 +366,71 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    private void handleEditProfile(User user) throws IOException {
 
-    private void handleEditProfile() throws IOException {
-        String updatedProfileData = in.readLine();
-        if (updatedProfileData == null) {
-            sendErrorResponse("No profile data received.");
-            return;
-        }
-
-        JsonObject profileJson = JsonParser.parseString(updatedProfileData).getAsJsonObject();
-        String name = profileJson.get("name").getAsString();
-        String updatedEmail = profileJson.get("email").getAsString(); // Renamed to updatedEmail
-        String phone = profileJson.get("phone").getAsString();
-        String password = profileJson.get("password").getAsString();
-
-        String updateResponse = updateUserProfile(name, updatedEmail, phone, password);
-        sendResponse(updateResponse);
-    }
-
-    private void handleGetProfile() throws IOException {
-        String userEmail = in.readLine();
-        if (userEmail == null) {
-            sendErrorResponse("No email provided for fetching profile.");
-            return;
-        }
-
-        String profileResponse = getUserProfile(userEmail);
-        sendResponse(profileResponse);
-    }
-
-    private String getUserProfile(String email) {
         String url = "jdbc:sqlite:" + databasePath;
-        String querySQL = "SELECT name, email, phone, password FROM users WHERE email = ?";
+        String updateSQL = "UPDATE users WHERE id = ?";
 
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement stmt = conn.prepareStatement(querySQL)) {
+        boolean isSuccess = false;
+        String message;
 
-            stmt.setString(1, email);
-            ResultSet rs = stmt.executeQuery();
+        try (Connection conn = DriverManager.getConnection(url); PreparedStatement stmt = conn.prepareStatement(updateSQL)) {
 
-            if (rs.next()) {
-                JsonObject profileJson = new JsonObject();
-                profileJson.addProperty("name", rs.getString("name"));
-                profileJson.addProperty("email", rs.getString("email"));
-                profileJson.addProperty("phone", rs.getString("phone"));
-                profileJson.addProperty("password", rs.getString("password"));
-
-                return createJsonResponse("response", profileJson.toString());
-            } else {
-                return createJsonResponse("response", "Error: User not found");
-            }
-        } catch (SQLException e) {
-            Logger.error("Database error while fetching profile: " + e.getMessage());
-            return createJsonResponse("response", "Error: Database error");
-        }
-    }
-
-    private String updateUserProfile(String name, String email, String phone, String password) {
-        String url = "jdbc:sqlite:" + databasePath;
-        String updateSQL = "UPDATE users SET name = ?, phone = ?, password = ? WHERE email = ?";
-
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement stmt = conn.prepareStatement(updateSQL)) {
-
-            stmt.setString(1, name);
-            stmt.setString(2, phone);
-            stmt.setString(3, password);
-            stmt.setString(4, email);
+            stmt.setString(1, String.valueOf(user.getId()));
 
             int rowsAffected = stmt.executeUpdate();
             if (rowsAffected > 0) {
-                Logger.info("User profile updated successfully for email: " + email);
-                return createJsonResponse("response", "SUCCESS");
+                isSuccess = true;
+                message = "User profile updated successfully";
+                Logger.info("User profile updated successfully for email: " + user.getEmail());
             } else {
-                Logger.error("No user found with email: " + email);
-                return createJsonResponse("response", "Error: User not found");
+                message = "Incorrect password!";
+                Logger.error("Incorrect password: " + user.getEmail());
             }
         } catch (SQLException e) {
+            message = "Error while editing profile";
             Logger.error("Database error while updating profile: " + e.getMessage());
-            return createJsonResponse("response", "Error: Database error");
         }
+
+        sendResponse(new ServerResponse(isSuccess, message, null));
+
     }
 
-    private void handleRegister() throws IOException {
-        String userData = in.readLine();
-        if (userData == null) {
-            sendErrorResponse("No user data received.");
-            return;
-        }
-        User user = gson.fromJson(userData, User.class);
-        String response = addUserToDatabase(user);
-        sendResponse(response);
-    }
+    private void handleGetProfile(User user) throws IOException {
+        String url = "jdbc:sqlite:" + databasePath;
+        String querySQL = "SELECT name, email, phone, password FROM users WHERE email = ?";
 
-    private void handleLogin() throws IOException {
-        String loginData = in.readLine();
-        if (loginData == null) {
-            sendErrorResponse("No login data received.");
-            return;
-        }
-        JsonObject loginJson = JsonParser.parseString(loginData).getAsJsonObject();
-        String email = loginJson.get("email").getAsString();
-        String password = loginJson.get("password").getAsString();
+        boolean isSuccess = false;
+        String message;
+        User retrievedUser = null;
 
-        String loginResponse = authenticateUser(email, password);
-        sendResponse(loginResponse);
-    }
+        try (Connection conn = DriverManager.getConnection(url); PreparedStatement stmt = conn.prepareStatement(querySQL)) {
 
-    private void handleUnknownCommand() {
-        String unknownCommandResponse = createJsonResponse("response", "Error: Unknown command");
-        sendResponse(unknownCommandResponse);
-    }
+            stmt.setString(1, user.getEmail());
+            ResultSet rs = stmt.executeQuery();
 
-    private void sendResponse(String response) {
-        out.println(response);
-        Logger.info("Server response to client: " + response);
-    }
-
-    private void sendErrorResponse(String error) {
-        sendResponse(createJsonResponse("response", "Error: " + error));
-    }
-
-    private void closeClientConnection() {
-        try {
-            if (clientSocket != null && !clientSocket.isClosed()) {
-                clientSocket.close();
-                Logger.info("Client connection closed.");
+            if (rs.next()) {
+                retrievedUser = new User(rs.getString("name"), rs.getString("email"), rs.getString("phone"), null);
+                isSuccess = true;
+                message = "User retrieved successfully";
+            } else {
+                message = "Error while retrieving profile";
+                Logger.error("No user found with email: " + user.getEmail());
             }
-        } catch (IOException e) {
-            Logger.error("Error closing client connection: " + e.getMessage());
+        } catch (SQLException e) {
+            message = "Error while retrieving profile";
+            Logger.error("Database error while fetching profile: " + e.getMessage());
         }
+        sendResponse(new ServerResponse(isSuccess, message, retrievedUser));
     }
 
-    private String addUserToDatabase(User user) {
+    private void handleRegister(User user) throws IOException {
         String url = "jdbc:sqlite:" + databasePath;
         String checkEmailSQL = "SELECT COUNT(*) FROM users WHERE email = ?";
         String insertSQL = "INSERT INTO users (name, email, phone, password) VALUES (?, ?, ?, ?)";
+
+        boolean isSuccess = false;
+        String message;
 
         try (Connection conn = DriverManager.getConnection(url)) {
             // Check if the email already exists
@@ -229,9 +438,10 @@ public class ClientHandler implements Runnable {
                 checkStmt.setString(1, user.getEmail());
                 ResultSet rs = checkStmt.executeQuery();
                 if (rs.next() && rs.getInt(1) > 0) {
-                    String errorResponse = createJsonResponse("response", "Error: Email already exists");
+                    message = "Error: Email already in use";
                     Logger.error("Email already exists in the database: " + user.getEmail());
-                    return errorResponse;
+                    sendResponse(new ServerResponse(false, message, null));
+                    return;
                 }
             }
 
@@ -242,52 +452,108 @@ public class ClientHandler implements Runnable {
                 insertStmt.setString(3, user.getPhone());
                 insertStmt.setString(4, user.getPassword());
                 insertStmt.executeUpdate();
+                isSuccess = true;
+                message = "User registered successfully";
                 Logger.info("User added successfully to the database: " + user.getName());
-                return createJsonResponse("response", "SUCCESS");
             }
 
         } catch (SQLException e) {
-            String errorResponse = createJsonResponse("response", "Error: " + e.getMessage());
+            message = "Error while creating a new user";
             Logger.error("Database error: " + e.getMessage());
-            return errorResponse;
         }
+
+        ServerResponse response = new ServerResponse(isSuccess, message, null);
+        sendResponse(response);
+
     }
 
-    // Helper method to format JSON responses consistently
-    private String createJsonResponse(String type, String data) {
-        JsonObject response = new JsonObject();
-        response.addProperty("type", type);
-        response.addProperty("data", data);
-        return response.toString();
-    }
+    private void handleLogin(User user) throws IOException {
 
-    private String authenticateUser(String email, String password) {
         String url = "jdbc:sqlite:" + databasePath;
-        String querySQL = "SELECT COUNT(*) FROM users WHERE email = ? AND password = ?";
+        String querySQL = "SELECT * FROM users WHERE email = ? AND password = ?";
 
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement stmt = conn.prepareStatement(querySQL)) {
+        boolean isSuccess = false;
+        String message;
+        User authenticatedUser = null;
+
+        try (Connection conn = DriverManager.getConnection(url); PreparedStatement stmt = conn.prepareStatement(querySQL)) {
 
             // Set the parameters for the query
-            stmt.setString(1, email);
-            stmt.setString(2, password);
+            stmt.setString(1, user.getEmail());
+            stmt.setString(2, user.getPassword());
 
             // Execute the query and check if a matching record exists
             ResultSet rs = stmt.executeQuery();
-            if (rs.next() && rs.getInt(1) > 0) {
-                Logger.info("User authenticated successfully: " + email);
-                return createJsonResponse("response", "SUCCESS");
+            if (rs.next()) {
+                authenticatedUser = new User(rs.getString("name"), rs.getString("email"), rs.getString("phone"), null);
+                authenticatedUser.setId(rs.getInt("id"));
+                Logger.info("User authenticated successfully: " + user.getEmail());
+                message = "User authenticated successfully";
+                isSuccess = true;
             } else {
-                Logger.error("Authentication failed for email: " + email);
-                return createJsonResponse("response", "Error: Invalid email or password");
+                Logger.error("Authentication failed for email: " + user.getEmail());
+                message = "Authentication failed";
             }
         } catch (SQLException e) {
-            String errorResponse = createJsonResponse("response", "Error: Database error during authentication");
             Logger.error("Database error during authentication: " + e.getMessage());
-            return errorResponse;
+            message = "Error while authenticating...";
+        }
+
+        ServerResponse response = new ServerResponse(isSuccess, message, authenticatedUser);
+        sendResponse(response);
+    }
+
+    private void sendInvite(User user, Group group) {
+        String url = "jdbc:sqlite:" + databasePath;
+        String checkInviteeSQL = "SELECT COUNT(*) FROM users WHERE email = ?";
+        String checkGroupSQL = "SELECT COUNT(*) FROM groups WHERE id = ?";
+        String insertSQL = "INSERT INTO group_invites (group_id, invited_user, invited_by, status) VALUES (?, ?, ?, 'pending')";
+
+        try (Connection conn = DriverManager.getConnection(url)) {
+            // Check if the invitee email exists
+            try (PreparedStatement checkInviteeStmt = conn.prepareStatement(checkInviteeSQL)) {
+                checkInviteeStmt.setString(1, user.getEmail());
+                ResultSet rs = checkInviteeStmt.executeQuery();
+                if (!rs.next() || rs.getInt(1) == 0) {
+                    Logger.error("Invitee email not found in the database: " + user.getEmail());
+                    sendResponse(new ServerResponse(false, "Error: Invitee email not found", null));
+                }
+                Logger.info("Invitee email found in the database: " + user.getEmail());
+            }
+
+            // Check if the group exists
+            try (PreparedStatement checkGroupStmt = conn.prepareStatement(checkGroupSQL)) {
+                checkGroupStmt.setInt(1, group.getOwnerId());
+                ResultSet rs = checkGroupStmt.executeQuery();
+                if (!rs.next() || rs.getInt(1) == 0) {
+                    Logger.error("Group not found in the database: " + group.getName());
+                    sendResponse(new ServerResponse(false, "Error: Group not found", null));
+                }
+                Logger.info("Group found in the database: " + group.getName());
+            }
+
+            // Insert the invite
+            try (PreparedStatement insertStmt = conn.prepareStatement(insertSQL)) {
+                insertStmt.setInt(1, group.getOwnerId());
+                insertStmt.setInt(2, user.getId());
+                insertStmt.setInt(3, user.getId());
+                insertStmt.executeUpdate();
+                Logger.info("Invite sent successfully");
+                sendResponse(new ServerResponse(true, "Invite sent successfully", null));
+            }
+
+
+        } catch (SQLException e) {
+            Logger.error("Database error: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Error while sending invite", null));
         }
     }
 
-
+    private void sendResponse(ServerResponse response) {
+        String jsonResponse = gson.toJson(response);
+        out.println(jsonResponse);
+        out.flush();
+        Logger.info("Server response to client: " + response);
+    }
 
 }

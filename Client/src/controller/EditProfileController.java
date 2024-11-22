@@ -1,44 +1,37 @@
 package controller;
 
 import communication.ClientService;
-import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.fxml.Initializable;
+import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
 import model.Message;
+import model.ServerResponse;
 import model.User;
 import utils.AlertUtils;
 import utils.Logger;
 import utils.NavigationManager;
 import utils.Routes;
 
-public class EditProfileController {
+import java.net.URL;
+import java.util.Base64;
+import java.util.ResourceBundle;
+
+public class EditProfileController implements Initializable {
+
+    public Label emailLabel;
+    private ClientService clientService;
+    private User currentUser;
 
     @FXML
     private TextField nameField;
-
-    @FXML
-    private TextField emailField;
 
     @FXML
     private TextField phoneField;
 
     @FXML
     private PasswordField passwordField;
-
-    private String serverIp;
-    private int serverPort;
-
-    /**
-     * Sets the server information for updating the profile.
-     *
-     * @param serverIp   the server's IP address
-     * @param serverPort the server's port
-     */
-    public void setServerInfo(String serverIp, int serverPort) {
-        this.serverIp = serverIp;
-        this.serverPort = serverPort;
-    }
 
     /**
      * Populates the fields with existing user data (this could be passed from the previous screen).
@@ -50,7 +43,7 @@ public class EditProfileController {
      */
     public void populateFields(String name, String email, String phone, String password) {
         nameField.setText(name);
-        emailField.setText(email);
+        emailLabel.setText("Email: " + email);
         phoneField.setText(phone);
         passwordField.setText(password);
     }
@@ -58,11 +51,11 @@ public class EditProfileController {
     /**
      * Handles the save changes action.
      */
-    public void handleSaveChangesAction(ActionEvent actionEvent) {
+    public void handleSaveChangesAction() {
         String name = nameField.getText().trim();
-        String email = emailField.getText().trim();
+        String email = currentUser.getEmail();
         String phone = phoneField.getText().trim();
-        String password = passwordField.getText().trim();
+        String password = Base64.getEncoder().encodeToString(passwordField.getText().trim().getBytes());
 
         if (name.isEmpty() || email.isEmpty() || phone.isEmpty() || password.isEmpty()) {
             AlertUtils.showError("Invalid Fields", "Please fill in all fields.");
@@ -71,17 +64,16 @@ public class EditProfileController {
 
         // Send updated profile to server
         new Thread(() -> {
-            ClientService clientService = new ClientService(serverIp, serverPort);
-            String response = clientService.sendRequest(new Message(Message.Type.EDIT_PROFILE, new User(name, email, phone, password)));
+            ServerResponse response = clientService.sendRequest(new Message(Message.Type.EDIT_PROFILE, new User(name, email, phone, password)));
 
             javafx.application.Platform.runLater(() -> {
-                if (response.contains("SUCCESS")) {
+                if (response.isSuccess()) {
                     Logger.info("Profile updated successfully.");
                     AlertUtils.showSuccess("Success", "Your profile has been updated.");
                     NavigationManager.switchScene(Routes.DASHBOARD);
                 } else {
                     Logger.error("Failed to update profile: " + response);
-                    AlertUtils.showError("Error", "Failed to update profile. Try again later.");
+                    AlertUtils.showError("Error", response.message());
                 }
             });
         }).start();
@@ -90,7 +82,14 @@ public class EditProfileController {
     /**
      * Handles the cancel action.
      */
-    public void handleCancelAction(ActionEvent actionEvent) {
+    public void handleCancelAction() {
         NavigationManager.switchScene(Routes.DASHBOARD);
+    }
+
+    @Override
+    public void initialize(URL url, ResourceBundle resourceBundle) {
+        this.clientService = ClientService.getInstance();
+        currentUser = clientService.getCurrentUser();
+        populateFields(currentUser.getName(), currentUser.getEmail(), currentUser.getPhone(), currentUser.getPassword());
     }
 }

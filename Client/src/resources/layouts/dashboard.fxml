@@ -2,43 +2,45 @@
 
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-<?import javafx.scene.text.*?>
+<?import javafx.scene.text.Text?>
 
 <BorderPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.DashboardController">
-    <!-- Side Menu -->
+    <!-- Sidebar -->
     <left>
-        <VBox spacing="10" style="-fx-background-color: #333333; -fx-padding: 15;" prefWidth="200">
-            <!-- User Section -->
-            <Text text="User Section" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: white;"/>
-            <Button text="Edit Profile" style="-fx-background-color: #444444; -fx-text-fill: white;" onAction="#handleEditProfile"/>
-            <Button text="Logout" style="-fx-background-color: #FF5722; -fx-text-fill: white;" onAction="#handleLogout"/>
+        <ScrollPane fitToWidth="true" fitToHeight="true">
+            <VBox spacing="10" style="-fx-padding: 15; -fx-background-color: #282828;">
+                <Text fx:id="userText" text="User Section"
+                      style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #FFFFFF;"/>
+                <Button text="Edit Profile" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
+                        onAction="#handleEditProfile"/>
+                <Button text="Logout" style="-fx-background-color: #FF5722; -fx-text-fill: #FFFFFF;"
+                        onAction="#handleLogout"/>
+                <Separator style="-fx-background-color: #555555;"/>
 
-            <Separator style="-fx-background-color: #777777;"/>
+                <Text text="Group Section" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #FFFFFF;"/>
+                <Button text="Add New Group" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
+                        onAction="#handleAddNewGroup"/>
+                <ListView fx:id="groupList" VBox.vgrow="ALWAYS"
+                          style="-fx-background-color: #333333; -fx-text-fill: #FFFFFF; -fx-border-color: #444444;"/>
+                <Separator style="-fx-background-color: #555555;"/>
 
-            <!-- Group Section -->
-            <Text text="Group Section" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: white;"/>
-            <Button text="Add New Group" style="-fx-background-color: #444444; -fx-text-fill: white;" onAction="#handleAddNewGroup"/>
-            <ListView fx:id="groupList" style="-fx-background-color: #444444; -fx-text-fill: white; -fx-border-color: #555555;"/>
-            <Button text="Select Group" style="-fx-background-color: #444444; -fx-text-fill: white;" onAction="#handleSelectGroup"/>
-
-            <Separator style="-fx-background-color: #777777;"/>
-
-            <!-- Current Group Operations -->
-            <Text text="Current Group" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: white;"/>
-            <Button text="Group Invites" style="-fx-background-color: #444444; -fx-text-fill: white;" onAction="#handleGroupInvites"/>
-            <Button text="Group Info" style="-fx-background-color: #444444; -fx-text-fill: white;" onAction="#handleGroupInfo"/>
-        </VBox>
+                <Text text="Current Group" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #FFFFFF;"/>
+                <Button text="Group Invites" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
+                        onAction="#handleGroupInvites"/>
+            </VBox>
+        </ScrollPane>
     </left>
 
-    <!-- Main Content Area -->
+    <!-- Main Content -->
     <center>
         <StackPane fx:id="mainContent" style="-fx-padding: 15;">
-            <Text text="Welcome to the Dashboard" style="-fx-font-size: 20; -fx-font-weight: bold;"/>
+            <Text text="Welcome to the Dashboard" style="-fx-font-size: 20; -fx-font-weight: bold; -fx-fill: #000000;"/>
         </StackPane>
     </center>
 
     <!-- Footer -->
     <bottom>
-        <Label text="Distributed Programming 2024/25 - Group Dashboard" style="-fx-background-color: #333333; -fx-text-fill: white; -fx-padding: 10;"/>
+        <Label text="Distributed Programming 2024/25 - Group Dashboard"
+               style="-fx-background-color: #282828; -fx-text-fill: #FFFFFF; -fx-padding: 10;"/>
     </bottom>
 </BorderPane>

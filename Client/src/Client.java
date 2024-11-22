@@ -1,5 +1,7 @@
 import communication.ClientService;
 import javafx.application.Application;
+import javafx.geometry.Rectangle2D;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 import utils.Logger;
 import utils.NavigationManager;
@@ -13,24 +15,6 @@ public class Client extends Application {
 
     private static String serverHost;
     private static int serverPort;
-
-    @Override
-    public void start(Stage primaryStage) throws IOException {
-
-        NavigationManager.initialize(primaryStage);
-
-        // TODO: Check if using Singleton is good practice
-        ClientService.initialize(serverHost, serverPort);
-
-        NavigationManager.switchScene(Routes.HOME);
-
-        primaryStage.setTitle("Home Page");
-        primaryStage.setMaxWidth(800);
-        primaryStage.setMaxHeight(600);
-        primaryStage.setMinWidth(800);
-        primaryStage.setMinHeight(600);
-        primaryStage.show();
-    }
 
     public static void main(String[] args) {
         // Check if correct number of arguments is provided
@@ -51,4 +35,28 @@ public class Client extends Application {
         // Launch the JavaFX application
         launch(args);
     }
+
+    @Override
+    public void start(Stage primaryStage) {
+        // Initialize the NavigationManager
+        NavigationManager.initialize(primaryStage);
+
+        // Initialize the ClientService (singleton)
+        ClientService.initialize(serverHost, serverPort);
+
+        // Start with the HOME scene
+        NavigationManager.switchScene(Routes.HOME);
+
+        // Get the screen dimensions and set the stage size dynamically
+        Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
+        primaryStage.setWidth(screenBounds.getWidth() * 0.8);
+        primaryStage.setHeight(screenBounds.getHeight() * 0.8);
+        primaryStage.setTitle("Home Page");
+        primaryStage.setMinWidth(800);
+        primaryStage.setMinHeight(600);
+        primaryStage.centerOnScreen();
+        primaryStage.show();
+    }
+
+
 }
