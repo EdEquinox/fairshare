@@ -5,23 +5,29 @@
 
 <AnchorPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
-            fx:controller="controller.GroupController"
-            prefHeight="400.0" prefWidth="600.0">
+            fx:controller="controller.GroupController">
 
-    <VBox spacing="10" alignment="TOP_CENTER" prefWidth="600" AnchorPane.topAnchor="10" AnchorPane.leftAnchor="10">
-
+    <VBox spacing="10" alignment="TOP_CENTER" AnchorPane.topAnchor="10" AnchorPane.bottomAnchor="10"
+          AnchorPane.leftAnchor="10" AnchorPane.rightAnchor="10">
+        <!-- Title -->
         <Label text="Group Page" style="-fx-font-size: 20; -fx-font-weight: bold;" alignment="CENTER"/>
 
-        <SplitPane dividerPositions="0.5">
-            <ListView fx:id="groupListView" prefWidth="300" style="-fx-background-color: #ffffff;"/>
+        <!-- SplitPane for Group List and User List -->
+        <SplitPane dividerPositions="0.5" VBox.vgrow="ALWAYS">
+            <!-- Group List -->
+            <ListView fx:id="groupListView" style="-fx-background-color: #ffffff;" VBox.vgrow="ALWAYS"/>
 
-            <VBox spacing="5" alignment="TOP_CENTER" prefWidth="300">
+            <!-- Users in Selected Group -->
+            <VBox spacing="5" alignment="TOP_CENTER" VBox.vgrow="ALWAYS">
                 <Label text="Users in Selected Group" style="-fx-font-size: 16; -fx-font-weight: bold;" alignment="CENTER"/>
-                <ListView fx:id="userListView" prefWidth="300" style="-fx-background-color: #ffffff;"/>
+                <ListView fx:id="userListView" style="-fx-background-color: #ffffff;" VBox.vgrow="ALWAYS"/>
             </VBox>
         </SplitPane>
 
-        <Button text="Expenses" onAction="#handleGoToExpensesPage" style="-fx-font-size: 16;"/>
-        <Button text="Back" onAction="#handleGoToDashboard" style="-fx-font-size: 16;"/>
+        <!-- Buttons -->
+        <HBox spacing="10" alignment="CENTER">
+            <Button text="Expenses" onAction="#handleGoToExpensesPage" style="-fx-font-size: 16;"/>
+            <Button text="Back" onAction="#handleGoToDashboard" style="-fx-font-size: 16;"/>
+        </HBox>
     </VBox>
 </AnchorPane>

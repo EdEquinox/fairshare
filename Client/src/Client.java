@@ -1,5 +1,7 @@
 import communication.ClientService;
 import javafx.application.Application;
+import javafx.geometry.Rectangle2D;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 import utils.Logger;
 import utils.NavigationManager;
@@ -35,18 +37,26 @@ public class Client extends Application {
     }
 
     @Override
-    public void start(Stage primaryStage) throws IOException {
-
+    public void start(Stage primaryStage) {
+        // Initialize the NavigationManager
         NavigationManager.initialize(primaryStage);
 
-        // TODO: Check if using Singleton is good practice
+        // Initialize the ClientService (singleton)
         ClientService.initialize(serverHost, serverPort);
 
+        // Start with the HOME scene
         NavigationManager.switchScene(Routes.HOME);
 
+        // Get the screen dimensions and set the stage size dynamically
+        Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
+        primaryStage.setWidth(screenBounds.getWidth() * 0.8);
+        primaryStage.setHeight(screenBounds.getHeight() * 0.8);
         primaryStage.setTitle("Home Page");
         primaryStage.setMinWidth(800);
         primaryStage.setMinHeight(600);
+        primaryStage.centerOnScreen();
         primaryStage.show();
     }
+
+
 }

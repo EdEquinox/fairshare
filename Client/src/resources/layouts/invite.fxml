@@ -27,9 +27,6 @@
 
         </VBox>
 
-        <VBox alignment="CENTER" spacing="10" style="-fx-padding: 20;">
-            <Text style="-fx-font-size: 14; -fx-text-fill: #007BFF;" text="Don't have an account? Register now!" />
-        </VBox>
     </VBox>
 
 </StackPane>
