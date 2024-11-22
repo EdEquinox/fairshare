@@ -1,4 +1,7 @@
 import java.io.*;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.Socket;
 
 public class BackupHandler implements Runnable{
@@ -7,6 +10,7 @@ public class BackupHandler implements Runnable{
     private final Socket backupSocket;
     private OutputStream out;
     private boolean initialized = false;
+    private static final String MULTICAST_ADDRESS = "230.44.44.44";
 
 
     public BackupHandler(String databasePath, Socket backupSocket) {
@@ -20,10 +24,24 @@ public class BackupHandler implements Runnable{
             // Send the database file to the backup server
             sendDatabaseFile();
         }
+
         // TODO Send heartbeat messages to the backup server
 
 
 
+    }
+
+    private void sendHeartbeat() {
+        // TODO Implement sending heartbeat messages to the backup server
+        try(DatagramSocket socket = new DatagramSocket()) {
+            // Send a heartbeat message to the backup server
+            InetAddress group = InetAddress.getByName(MULTICAST_ADDRESS);
+            String message = "HEARTBEAT";
+            DatagramPacket packet = new DatagramPacket(message.getBytes(), message.length(), group, 4444);
+            socket.send(packet);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private void sendDatabaseFile() {

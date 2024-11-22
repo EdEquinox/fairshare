@@ -1,17 +1,84 @@
+import model.Message;
+import model.ServerResponse;
 import utils.Logger;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 
 public class BackupService {
     private final String databasePath;
-    private final ServerSocket serverSocket;
+    private static BackupService instance;
+    private Socket socket;
+    private BufferedReader in;
+    private PrintWriter out;
+    private boolean isConnected = false;
 
-    public BackupService(String databasePath, ServerSocket serverSocket) {
+    final static int PORT = 4444;
+    final static int TIMEOUT = 30000;
+
+    public BackupService(String databasePath) {
         this.databasePath = databasePath;
-        this.serverSocket = serverSocket;
+    }
+
+    public static BackupService getInstance(String databasePath) {
+        if (instance == null) {
+            throw new IllegalStateException("BackupService not initialized. Call initialize() first.");
+        }
+        return instance;
+    }
+
+    public static void initialize(String dbPath) {
+        if (instance == null) {
+            instance = new BackupService(dbPath);
+        } else {
+            throw new IllegalStateException("BackupService has already been initialized.");
+        }
+    }
+
+    public boolean connectToServer() {
+        try {
+            socket = new Socket("127.0.0.1",PORT);
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            out = new PrintWriter(socket.getOutputStream(), true);
+            Logger.info("Connected to server at " + socket.getInetAddress());
+            isConnected = true;
+            return true;
+        } catch (IOException e) {
+            Logger.error("Error starting backup server: " + e.getMessage());
+        }
+        return false;
+    }
+
+    private ServerResponse sendRequest(Message request) {
+        if (!isConnected) {
+            Logger.error("Not connected to server. Cannot send request.");
+            return null;
+        }
+
+        try {
+            out.println(request);
+            String response = in.readLine();
+            return ServerResponse.fromString(response);
+        } catch (IOException e) {
+            Logger.error("Error sending request to server: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private ServerResponse recieveRequest() {
+        if (!isConnected) {
+            Logger.error("Not connected to server. Cannot recieve request.");
+            return null;
+        }
+
+        try {
+            String request = in.readLine();
+            return ServerResponse.fromString(request);
+        } catch (IOException e) {
+            Logger.error("Error recieving request from server: " + e.getMessage());
+        }
+        return null;
     }
 
     public void startServer() throws IOException {

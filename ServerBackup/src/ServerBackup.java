@@ -19,38 +19,16 @@ public class ServerBackup {
         File folder = new File(dbPath);
         if (!folder.exists()) {
             Logger.error("Folder does not exist: " + dbPath);
-            System.exit(1);
+            folder.mkdirs();
         }
         if (folder.isDirectory() && folder.list().length > 0) {
             Logger.error("Folder is not empty: " + dbPath);
             System.exit(1);
         }
 
-        String databasePath = dbPath + "/backup.db";
-        ServerSocket serverSocket = null;
+        // Start the server
+        BackupService.initialize(dbPath);
 
-        // Waits for the main server's haertbeat for 30 seconds using tcp
-        try {
-            serverSocket = new ServerSocket(0);
-            serverSocket.setSoTimeout(30000);
-        } catch (IOException e) {
-            Logger.error("Error creating server socket: " + e.getMessage());
-            System.exit(1);
-        }
-
-        // Start the backup server
-        try {
-            Logger.info("Backup server started on port " + serverSocket.getLocalPort());
-            Logger.info("Database path: " + databasePath);
-            Logger.info("Backup server running on ip: " + serverSocket.getInetAddress().getHostAddress());
-
-            BackupService serverService = new BackupService(databasePath, serverSocket);
-            serverService.startServer();
-
-        } catch (IOException e) {
-            Logger.error("Error starting backup server: " + e.getMessage());
-            System.exit(1);
-        }
 
     }
 }

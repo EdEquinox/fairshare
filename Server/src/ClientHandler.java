@@ -9,6 +9,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.lang.reflect.Type;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.Socket;
 import java.sql.*;
 import java.util.ArrayList;
@@ -21,6 +24,8 @@ public class ClientHandler implements Runnable {
     private BufferedReader in;
     private final String databasePath;
     private static final Gson gson = new Gson();
+    private final static String MULTICAST_ADDRESS = "230.44.44.44";
+    private final static int MULTICAST_PORT = 4444;
 
     public ClientHandler(Socket clientSocket, String databasePath) {
         this.clientSocket = clientSocket;
@@ -29,10 +34,42 @@ public class ClientHandler implements Runnable {
 
     @Override
     public void run() {
+
         try {
             out = new PrintWriter(clientSocket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
+            String command;
+
+            if ("CLIENT".equals((command = in.readLine()))) {
+                Logger.info("Client connected: " + clientSocket.getInetAddress().getHostAddress());
+                handleClientConnection(in,out);
+            } else if("BACKUP".equals(command)) {
+                Logger.info("Backup server connected: " + clientSocket.getInetAddress().getHostAddress());
+                handleBackupConnection(in,out);
+            } else {
+                Logger.error("Invalid connection type: " + command);
+                return;
+            }
+
+        } catch (IOException e) {
+            Logger.error("Error handling client: " + e.getMessage());
+        } finally {
+            try {
+                if (clientSocket != null && !clientSocket.isClosed()) {
+                    clientSocket.close();
+                    Logger.info("Client connection closed.");
+                }
+            } catch (IOException e) {
+                Logger.error("Error closing client connection: " + e.getMessage());
+            }
+        }
+    }
+
+    private void handleClientConnection(BufferedReader in, PrintWriter out) {
+        try {
+            out.println("CLIENT");
+            out.flush();
             String command;
             while ((command = in.readLine()) != null) {
                 Logger.info("Received command: " + command);
@@ -99,19 +136,76 @@ public class ClientHandler implements Runnable {
                     Logger.error("Error receiving message: " + e.getMessage());
                     sendResponse(new ServerResponse(false, "Internal Server Error...", null));
                 }
+            }
+        } catch (Exception e) {
+            Logger.error("Error sending message: " + e.getMessage());
+        }
+    }
 
+    private void handleBackupConnection(BufferedReader in, PrintWriter out) {
+        try {
+            out.println("BACKUP");
+            out.flush();
+            String command;
+            while ((command = in.readLine()) != null) {
+                Logger.info("Received command: " + command);
+
+                try {
+                    Message message = gson.fromJson(command, Message.class); // Parseia diretamente o comando JSON
+                    Logger.info("Received message: " + message);
+                    Logger.info("Message type: " + message.type());
+                    switch (message.type()) {
+                        case Message.Type.HEARTBEAT ->{
+                            sendHeatbeat();
+                        }
+                        case Message.Type.UPDATE_BACKUP -> {
+                            String payload = gson.fromJson(gson.toJson(message.payload()), String.class);
+                            updateDatabase(payload);
+                        }
+                        case Message.Type.STOP_BACKUP -> {
+                            stopBackupServer();
+                        }
+                        default -> Logger.error("Invalid command: " + message.type());
+                    }
+                } catch (Exception e) {
+                    Logger.error("Error receiving message: " + e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            Logger.error("Error sending message: " + e.getMessage());
+        }
+    }
+
+    private void sendHeatbeat() {
+        try(DatagramSocket socket = new DatagramSocket()) {
+            InetAddress group = InetAddress.getByName(MULTICAST_ADDRESS);
+            String message = "HEARTBEAT";
+            DatagramPacket packet = new DatagramPacket(message.getBytes(), message.length(), group, MULTICAST_PORT);
+            socket.send(packet);
+        } catch (Exception e) {
+            Logger.error("Backup server is not alive: " + e.getMessage());
+            stopBackupServer();
+        }
+    }
+
+    private void updateDatabase(String payload) {
+        try(Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
+            Statement stmt = conn.createStatement();
+            stmt.executeUpdate(payload);
+            Logger.info("Database updated successfully.");
+        } catch (Exception e) {
+            Logger.error("Error updating database: " + e.getMessage());
+        }
+    }
+
+    private void stopBackupServer() {
+        try {
+            if (clientSocket != null && !clientSocket.isClosed()) {
+                clientSocket.close();
+                Logger.info("Backup server connection closed.");
             }
         } catch (IOException e) {
-            Logger.error("Error handling client: " + e.getMessage());
-        } finally {
-            try {
-                if (clientSocket != null && !clientSocket.isClosed()) {
-                    clientSocket.close();
-                    Logger.info("Client connection closed.");
-                }
-            } catch (IOException e) {
-                Logger.error("Error closing client connection: " + e.getMessage());
-            }
+            Logger.error("Error closing backup server connection: " + e.getMessage());
         }
     }
 
@@ -159,8 +253,6 @@ public class ClientHandler implements Runnable {
         sendResponse(new ServerResponse(isSuccess, message, expenses));
     }
 
-
-
     private void handleGetUsersForGroup(Group group) {
         // query que utiliza a tabela conjuta de users e grupos para devolver os users de um determinado grupo
         String query = "SELECT u.name " +
@@ -198,8 +290,6 @@ public class ClientHandler implements Runnable {
 
         sendResponse(new ServerResponse(isSuccess, message, users));
     }
-
-
 
     private void handleGetGroups(User user) {
 
@@ -251,10 +341,6 @@ public class ClientHandler implements Runnable {
 
         sendResponse(new ServerResponse(isSuccess, message, groups));
     }
-
-
-
-
 
     private void handleCreateGroup(Group group) {
         String url = "jdbc:sqlite:" + databasePath;

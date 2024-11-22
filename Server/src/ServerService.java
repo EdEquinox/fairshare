@@ -44,18 +44,8 @@ public class ServerService {
             Socket clientSocket = serverSocket.accept();
             Logger.info("Client connected: " + clientSocket.getInetAddress().getHostAddress());
 
-            // Check if its a client or a backup server
-            if (clientSocket.getPort() == 4444) {
-                Logger.info("Backup server connected: " + clientSocket.getInetAddress().getHostAddress());
-                // Handle backup server
-                BackupHandler backupService = new BackupHandler(databasePath, clientSocket);
-                new Thread(backupService).start();
-            } else {
-                Logger.info("Client connected: " + clientSocket.getInetAddress().getHostAddress());
-                // Handle client
-                ClientHandler clientHandler = new ClientHandler(clientSocket, databasePath);
-                new Thread(clientHandler).start();
-            }
+            ClientHandler clientHandler = new ClientHandler(clientSocket, databasePath);
+            new Thread(clientHandler).start();
 
         }
     }
