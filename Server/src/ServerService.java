@@ -1,9 +1,10 @@
+import com.google.gson.Gson;
+import model.ServerResponse;
 import utils.Logger;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.*;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
@@ -12,6 +13,11 @@ import java.sql.ResultSet;
 public class ServerService {
     private final String databasePath;
     private final ServerSocket serverSocket;
+    private final String multicastAddress = "230.44.44.44";
+    private final int multicastPort = 4444;
+    private final int heartbeatInterval = 5000;
+    private final int version = 1;
+    private final Gson gson = new Gson();
 
     public ServerService(String databasePath, ServerSocket serverSocket) {
         this.databasePath = databasePath;
@@ -38,6 +44,8 @@ public class ServerService {
 
         // Confirm that the database path is correctly initialized
         Logger.info("Using database located at: " + new File(databasePath).getAbsolutePath());
+
+        new Thread(new HeartbeatSender(version, serverSocket.getLocalPort())).start();
 
         // Start listening for client connections
         while (true) {
@@ -179,4 +187,32 @@ public class ServerService {
             Logger.error("Error stopping server: " + e.getMessage());
         }
     }
+
+    private class HeartbeatSender implements Runnable {
+        private final int version;
+        private final int tcpPort;
+
+        public HeartbeatSender(int version, int tcpPort) {
+            this.version = version;
+            this.tcpPort = tcpPort;
+        }
+
+        @Override
+        public void run() {
+            try (DatagramSocket socket = new DatagramSocket()) {
+                InetAddress group = InetAddress.getByName(multicastAddress);
+                ServerResponse response = new ServerResponse(true, "Heartbeat", null);
+                byte[] data = gson.toJson(response).getBytes();
+
+                while (true) {
+                    DatagramPacket packet = new DatagramPacket(data, data.length, group, multicastPort);
+                    socket.send(packet);
+                    Thread.sleep(heartbeatInterval);
+                }
+            } catch (Exception e) {
+                Logger.error("Error sending heartbeat: " + e.getMessage());
+            }
+        }
+    }
+
 }

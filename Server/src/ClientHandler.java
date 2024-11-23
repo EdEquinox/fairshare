@@ -4,10 +4,7 @@ import model.*;
 import utils.Logger;
 import com.google.gson.Gson;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
 import java.lang.reflect.Type;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -26,6 +23,7 @@ public class ClientHandler implements Runnable {
     private static final Gson gson = new Gson();
     private final static String MULTICAST_ADDRESS = "230.44.44.44";
     private final static int MULTICAST_PORT = 4444;
+    private int version = 1;
 
     public ClientHandler(Socket clientSocket, String databasePath) {
         this.clientSocket = clientSocket;
@@ -39,37 +37,6 @@ public class ClientHandler implements Runnable {
             out = new PrintWriter(clientSocket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
-            String command;
-
-            if ("CLIENT".equals((command = in.readLine()))) {
-                Logger.info("Client connected: " + clientSocket.getInetAddress().getHostAddress());
-                handleClientConnection(in,out);
-            } else if("BACKUP".equals(command)) {
-                Logger.info("Backup server connected: " + clientSocket.getInetAddress().getHostAddress());
-                handleBackupConnection(in,out);
-            } else {
-                Logger.error("Invalid connection type: " + command);
-                return;
-            }
-
-        } catch (IOException e) {
-            Logger.error("Error handling client: " + e.getMessage());
-        } finally {
-            try {
-                if (clientSocket != null && !clientSocket.isClosed()) {
-                    clientSocket.close();
-                    Logger.info("Client connection closed.");
-                }
-            } catch (IOException e) {
-                Logger.error("Error closing client connection: " + e.getMessage());
-            }
-        }
-    }
-
-    private void handleClientConnection(BufferedReader in, PrintWriter out) {
-        try {
-            out.println("CLIENT");
-            out.flush();
             String command;
             while ((command = in.readLine()) != null) {
                 Logger.info("Received command: " + command);
@@ -113,10 +80,7 @@ public class ClientHandler implements Runnable {
                             handleGetInvites(user);
                         }
                         case Message.Type.INVITE -> {
-                            Type payloadType = new TypeToken<ArrayList<Object>>() {}.getType();
-                            ArrayList<Object> payload = gson.fromJson(gson.toJson(message.payload()), payloadType);
-                            Type groupType = new TypeToken<Group>() {}.getType();
-                            Type userType = new TypeToken<User>() {}.getType();
+                            ArrayList<Object> payload = gson.fromJson(gson.toJson(message.payload()), ArrayList.class);
                             Group group = gson.fromJson(gson.toJson(payload.get(0)), Group.class);
                             User user = gson.fromJson(gson.toJson(payload.get(1)), User.class);
                             String email = gson.fromJson(gson.toJson(payload.get(2)), String.class);
@@ -130,6 +94,9 @@ public class ClientHandler implements Runnable {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
                             handleGetExpenses(group);
                         }
+                        case Message.Type.BACKUP_INIT -> {
+                            sendDatabaseFile();
+                        }
                         default -> sendResponse(new ServerResponse(false, "Invalid command", null));
                     }
                 } catch (Exception e) {
@@ -137,76 +104,52 @@ public class ClientHandler implements Runnable {
                     sendResponse(new ServerResponse(false, "Internal Server Error...", null));
                 }
             }
-        } catch (Exception e) {
-            Logger.error("Error sending message: " + e.getMessage());
-        }
-    }
 
-    private void handleBackupConnection(BufferedReader in, PrintWriter out) {
-        try {
-            out.println("BACKUP");
-            out.flush();
-            String command;
-            while ((command = in.readLine()) != null) {
-                Logger.info("Received command: " + command);
-
-                try {
-                    Message message = gson.fromJson(command, Message.class); // Parseia diretamente o comando JSON
-                    Logger.info("Received message: " + message);
-                    Logger.info("Message type: " + message.type());
-                    switch (message.type()) {
-                        case Message.Type.HEARTBEAT ->{
-                            sendHeatbeat();
-                        }
-                        case Message.Type.UPDATE_BACKUP -> {
-                            String payload = gson.fromJson(gson.toJson(message.payload()), String.class);
-                            updateDatabase(payload);
-                        }
-                        case Message.Type.STOP_BACKUP -> {
-                            stopBackupServer();
-                        }
-                        default -> Logger.error("Invalid command: " + message.type());
-                    }
-                } catch (Exception e) {
-                    Logger.error("Error receiving message: " + e.getMessage());
-                }
-            }
-        } catch (Exception e) {
-            Logger.error("Error sending message: " + e.getMessage());
-        }
-    }
-
-    private void sendHeatbeat() {
-        try(DatagramSocket socket = new DatagramSocket()) {
-            InetAddress group = InetAddress.getByName(MULTICAST_ADDRESS);
-            String message = "HEARTBEAT";
-            DatagramPacket packet = new DatagramPacket(message.getBytes(), message.length(), group, MULTICAST_PORT);
-            socket.send(packet);
-        } catch (Exception e) {
-            Logger.error("Backup server is not alive: " + e.getMessage());
-            stopBackupServer();
-        }
-    }
-
-    private void updateDatabase(String payload) {
-        try(Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
-            Statement stmt = conn.createStatement();
-            stmt.executeUpdate(payload);
-            Logger.info("Database updated successfully.");
-        } catch (Exception e) {
-            Logger.error("Error updating database: " + e.getMessage());
-        }
-    }
-
-    private void stopBackupServer() {
-        try {
-            if (clientSocket != null && !clientSocket.isClosed()) {
-                clientSocket.close();
-                Logger.info("Backup server connection closed.");
-            }
         } catch (IOException e) {
-            Logger.error("Error closing backup server connection: " + e.getMessage());
+            Logger.error("Error handling client: " + e.getMessage());
+        } finally {
+            try {
+                if (clientSocket != null && !clientSocket.isClosed()) {
+                    clientSocket.close();
+                    Logger.info("Client connection closed.");
+                }
+            } catch (IOException e) {
+                Logger.error("Error closing client connection: " + e.getMessage());
+            }
         }
+    }
+
+    private void sendDatabaseFile() {
+        try {
+            Logger.info("Sending database file to client...");
+            File databaseFile = new File(databasePath);
+            byte[] buffer = new byte[(int) databaseFile.length()];
+            Logger.info("Database file size: " + buffer.length);
+            sendResponse(new ServerResponse(true, "Database file sent successfully", buffer));
+        } catch (Exception e) {
+            Logger.error("Error sending database file: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Error sending database file", null));
+        }
+    }
+
+    private void sendHeartbeat(String query, Integer version) {
+        Logger.info("Sending heartbeat from main server...");
+        ArrayList<Object> payload = new ArrayList<>();
+        payload.add(query);
+        payload.add(version);
+
+        try (DatagramSocket socket = new DatagramSocket()) {
+            InetAddress group = InetAddress.getByName(MULTICAST_ADDRESS);
+            ServerResponse response = new ServerResponse(true, "Heartbeat sent successfully", payload);
+            byte[] data = gson.toJson(response).getBytes();
+            DatagramPacket packet = new DatagramPacket(data, data.length, group, MULTICAST_PORT);
+            socket.send(packet);
+            Logger.info("Heartbeat sent successfully.");
+
+        } catch (Exception e) {
+            Logger.error("Error sending heartbeat: " + e.getMessage());
+        }
+
     }
 
     private void handleGetExpenses(Group group) {
@@ -375,6 +318,13 @@ public class ClientHandler implements Runnable {
                     try (PreparedStatement insertGroupStmt = conn.prepareStatement(insertGroupSQL, Statement.RETURN_GENERATED_KEYS)) {
                         insertGroupStmt.setString(1, group.name());
                         insertGroupStmt.executeUpdate();
+                        new Thread(() -> {
+                            try {
+                                //sendHeartbeat(insertGroupSQL, version++);
+                            } catch (Exception e) {
+                                Logger.error("Error sending heartbeat: " + e.getMessage());
+                            }
+                        }).start();
 
                         try (ResultSet generatedKeys = insertGroupStmt.getGeneratedKeys()) {
                             if (generatedKeys.next()) {
@@ -392,6 +342,8 @@ public class ClientHandler implements Runnable {
                 insertUserGroupStmt.setInt(1, group.ownerId());
                 insertUserGroupStmt.setInt(2, groupId);
                 insertUserGroupStmt.executeUpdate();
+                version++;
+                //sendHeartbeat(insertUserGroupStmt, version);
                 Logger.info("User associated with group: User ID " + group.ownerId() + ", Group ID " + groupId);
             }
 
@@ -466,6 +418,8 @@ public class ClientHandler implements Runnable {
             stmt.setString(1, String.valueOf(user.getId()));
 
             int rowsAffected = stmt.executeUpdate();
+            version++;
+            //sendHeartbeat(stmt, version);
             if (rowsAffected > 0) {
                 isSuccess = true;
                 message = "User profile updated successfully";
@@ -539,6 +493,8 @@ public class ClientHandler implements Runnable {
                 insertStmt.setString(3, user.getPhone());
                 insertStmt.setString(4, user.getPassword());
                 insertStmt.executeUpdate();
+                version++;
+                //sendHeartbeat(insertStmt, version);
                 isSuccess = true;
                 message = "User registered successfully";
                 Logger.info("User added successfully to the database: " + user.getName());
@@ -602,7 +558,7 @@ public class ClientHandler implements Runnable {
                 checkInviteeStmt.setString(1, email);
                 ResultSet rs = checkInviteeStmt.executeQuery();
                 if (!rs.next() || rs.getInt(1) == 0) {
-                    Logger.error("Invitee email not found in the database: " + user.getEmail());
+                    Logger.error("Invitee email not found in the database: " + email);
                     sendResponse(new ServerResponse(false, "Error: Invitee email not found", null));
                     return;
                 }
@@ -611,7 +567,7 @@ public class ClientHandler implements Runnable {
 
             // Check if the group exists
             try (PreparedStatement checkGroupStmt = conn.prepareStatement(checkGroupSQL)) {
-                checkGroupStmt.setInt(1, group.getOwnerId());
+                checkGroupStmt.setInt(1, group.getId());
                 ResultSet rs = checkGroupStmt.executeQuery();
                 if (!rs.next() || rs.getInt(1) == 0) {
                     Logger.error("Group not found in the database: " + group.getName());
@@ -622,18 +578,16 @@ public class ClientHandler implements Runnable {
             }
 
             //Get invitee user
-            String getUserSQL = "SELECT id, name FROM users WHERE email = ?";
-            User invitee = new User("", email, "", "");
+            String getUserSQL = "SELECT id FROM users WHERE email = ?";
+            int inviteeId = 0;
             try (PreparedStatement getUserStmt = conn.prepareStatement(getUserSQL)) {
                 getUserStmt.setString(1, email);
                 ResultSet rs = getUserStmt.executeQuery();
                 if (rs.next()) {
-                    invitee.setId(rs.getInt("id"));
-                    invitee.setEmail(email);
-                    invitee.setName(rs.getString("name"));
-                    Logger.info("User found in the database: " + invitee.getName());
+                    inviteeId = rs.getInt("id");
+                    Logger.info("User found in the database: " + email);
                 } else {
-                    Logger.error("User not found in the database: " + invitee.getName());
+                    Logger.error("User not found in the database: " + email);
                     sendResponse(new ServerResponse(false, "Error: User not found", null));
                     return;
                 }
@@ -642,7 +596,7 @@ public class ClientHandler implements Runnable {
             // Check if the invitee is already a member of the group
             String checkUserGroupSQL = "SELECT COUNT(*) FROM users_groups WHERE user_id = ? AND group_id = ?";
             try (PreparedStatement checkUserGroupStmt = conn.prepareStatement(checkUserGroupSQL)) {
-                checkUserGroupStmt.setInt(1, invitee.getId());
+                checkUserGroupStmt.setInt(1, inviteeId);
                 checkUserGroupStmt.setInt(2, group.getId());
                 ResultSet rs = checkUserGroupStmt.executeQuery();
                 if (rs.next() && rs.getInt(1) > 0) {
@@ -656,9 +610,11 @@ public class ClientHandler implements Runnable {
             // Insert the invite
             try (PreparedStatement insertStmt = conn.prepareStatement(insertSQL)) {
                 insertStmt.setInt(1, group.getOwnerId());
-                insertStmt.setInt(2, invitee.getId());
+                insertStmt.setInt(2, inviteeId);
                 insertStmt.setInt(3, user.getId());
                 insertStmt.executeUpdate();
+                version++;
+                sendHeartbeat(insertSQL, version);
                 Logger.info("Invite sent successfully");
                 sendResponse(new ServerResponse(true, "Invite sent successfully", null));
             }

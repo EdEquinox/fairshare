@@ -25,7 +25,15 @@ public class BackupHandler implements Runnable{
             sendDatabaseFile();
         }
 
-        // TODO Send heartbeat messages to the backup server
+        while (true) {
+            // Send a heartbeat message to the backup server
+            sendHeartbeat();
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
 
 
 
