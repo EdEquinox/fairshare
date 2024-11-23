@@ -92,6 +92,23 @@ public class ClientHandler implements Runnable {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
                             handleGetExpenses(group);
                         }
+                        case Message.Type.GET_EXPENSES_USER -> {
+                            int userId = gson.fromJson(gson.toJson(message.payload()), Integer.class); // Deserialize as int
+                            handleGetExpensesUser(userId);
+                        }
+                        case Message.Type.ADD_EXPENSE -> {
+                            Expense expense = gson.fromJson(gson.toJson(message.payload()), Expense.class);
+                            handleAddExpense(expense);
+                        }
+                        case Message.Type.EDIT_EXPENSE -> {
+                            Expense expense = gson.fromJson(gson.toJson(message.payload()), Expense.class);
+                            handleEditExpense(expense);
+                        }
+                        case Message.Type.DELETE_EXPENSE -> {
+                            int expenseId = gson.fromJson(gson.toJson(message.payload()), Integer.class);
+                            handleDeleteExpense(expenseId);
+                        }
+
                         default -> sendResponse(new ServerResponse(false, "Invalid command", null));
                     }
                 } catch (Exception e) {
@@ -114,43 +131,185 @@ public class ClientHandler implements Runnable {
         }
     }
 
+
+    private void handleAddExpense(Expense expense) {
+        String query = "INSERT INTO expenses (id, group_id, paid_by, amount, description, date, added_by) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+        boolean isSuccess = false;
+        String message;
+
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, expense.getId());
+            stmt.setInt(2, expense.getGroupId());
+            stmt.setInt(3, expense.getPaidBy());
+            stmt.setDouble(4, expense.getAmount());
+            stmt.setString(5, expense.getDescription());
+            stmt.setString(6, expense.getDate());
+            stmt.setInt(7, expense.getAddedBy()); // Populate the added_by field
+
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected > 0) {
+                isSuccess = true;
+                message = "Expense added successfully.";
+                Logger.info("Expense added to the database: " + expense);
+            } else {
+                message = "Failed to add expense to the database.";
+                Logger.error("No rows affected while adding expense: " + expense);
+            }
+
+        } catch (SQLException e) {
+            message = "Database error while adding expense.";
+            Logger.error("Database error while adding expense: " + e.getMessage());
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, null));
+    }
+
+
+    private void handleEditExpense(Expense expense) {
+        String query = "UPDATE expenses SET group_id = ?, paid_by = ?, amount = ?, description = ?, date = ? WHERE id = ?";
+
+        boolean isSuccess = false;
+        String message;
+
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, expense.getGroupId());
+            stmt.setInt(2, expense.getPaidBy());
+            stmt.setDouble(3, expense.getAmount());
+            stmt.setString(4, expense.getDescription());
+            stmt.setString(5, expense.getDate());
+            stmt.setInt(6, expense.getId());
+            stmt.executeUpdate();
+
+            isSuccess = true;
+            message = "Expense updated successfully.";
+            Logger.info("Expense updated in the database: " + expense);
+
+        } catch (SQLException e) {
+            message = "Failed to update expense.";
+            Logger.error("Database error while updating expense: " + e.getMessage());
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, null));
+    }
+
+
+    private void handleDeleteExpense(int expenseId) {
+        String query = "DELETE FROM expenses WHERE id = ?";
+
+        boolean isSuccess = false;
+        String message;
+
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, expenseId);
+            stmt.executeUpdate();
+
+            isSuccess = true;
+            message = "Expense deleted successfully.";
+            Logger.info("Expense deleted from the database. ID: " + expenseId);
+
+        } catch (SQLException e) {
+            message = "Failed to delete expense.";
+            Logger.error("Database error while deleting expense: " + e.getMessage());
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, null));
+    }
+
+
+    private void handleGetExpensesUser(int userId) {
+        String query = "SELECT id, group_id, paid_by, added_by, amount, description, date " +
+                "FROM expenses WHERE paid_by = ? ORDER BY date ASC";
+
+        boolean isSuccess = false;
+        String message;
+        List<Expense> expenses = new ArrayList<>();
+
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+
+            stmt.setInt(1, userId);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                int id = rs.getInt("id");
+                int groupId = rs.getInt("group_id");
+                int paidBy = rs.getInt("paid_by");
+                int addedBy = rs.getInt("added_by"); // Align with constructor
+                double amount = rs.getDouble("amount");
+                String description = rs.getString("description") != null ? rs.getString("description") : "";
+                String date = rs.getString("date") != null ? rs.getString("date") : "";
+
+                // Correct constructor usage
+                expenses.add(new Expense(id, groupId, paidBy, addedBy, amount, description, date));
+            }
+
+            if (!expenses.isEmpty()) {
+                isSuccess = true;
+                message = "Expenses retrieved successfully.";
+                Logger.info("Expenses retrieved for user ID: " + userId);
+            } else {
+                isSuccess = true; // No expenses is not an error
+                message = "No expenses found for the user.";
+                Logger.info("No expenses found for user ID: " + userId);
+            }
+
+        } catch (SQLException e) {
+            isSuccess = false;
+            message = "Error while retrieving expenses.";
+            Logger.error("Database error while fetching expenses for user ID: " + userId + ". Error: " + e.getMessage());
+        }
+
+        sendResponse(new ServerResponse(isSuccess, message, expenses));
+    }
+
+
     private void handleGetExpenses(Group group) {
-        // Query que seleciona as expenses de um determinado grupo pelo id e ordenado pelas datas
-        String query = "SELECT id, group_id, paid_by, amount, description, date " +
+        String query = "SELECT id, group_id, paid_by, added_by, amount, description, date " +
                 "FROM expenses WHERE group_id = ? ORDER BY date ASC";
 
         boolean isSuccess = false;
         String message;
         List<Expense> expenses = new ArrayList<>();
 
-        // conecta à base de dados
         try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
              PreparedStatement stmt = conn.prepareStatement(query)) {
 
-            stmt.setInt(1, group.getId()); // Usa o id do grupo passado como parametro
+            stmt.setInt(1, group.getId());
             ResultSet rs = stmt.executeQuery();
-            // executa a query e em quanto tiver mais expenses continua a adicionar
+
             while (rs.next()) {
-                expenses.add(new Expense(
-                        rs.getInt("id"),
-                        rs.getInt("group_id"),
-                        rs.getInt("paid_by"),
-                        rs.getDouble("amount"),
-                        rs.getString("description"),
-                        rs.getString("date")
-                ));
+                int id = rs.getInt("id");
+                int groupId = rs.getInt("group_id");
+                int paidBy = rs.getInt("paid_by");
+                int addedBy = rs.getInt("added_by"); // Align with constructor
+                double amount = rs.getDouble("amount");
+                String description = rs.getString("description") != null ? rs.getString("description") : "";
+                String date = rs.getString("date") != null ? rs.getString("date") : "";
+
+                // Correct constructor usage
+                expenses.add(new Expense(id, groupId, paidBy, addedBy, amount, description, date));
             }
-            // verifica se a lista esta vazia
-            if (expenses.isEmpty()) {
-                message = "No expenses found for the group.";
-                Logger.info("No expenses found for group: " + group.name());
-            } else {
+
+            if (!expenses.isEmpty()) {
                 isSuccess = true;
                 message = "Expenses retrieved successfully.";
                 Logger.info("Expenses retrieved for group: " + group.name());
+            } else {
+                isSuccess = true; // No expenses is not an error
+                message = "No expenses found for the group.";
+                Logger.info("No expenses found for group: " + group.name());
             }
 
         } catch (SQLException e) {
+            isSuccess = false;
             message = "Error while retrieving expenses.";
             Logger.error("Database error while fetching expenses: " + e.getMessage());
         }
@@ -160,25 +319,30 @@ public class ClientHandler implements Runnable {
 
 
 
+
+
+
     private void handleGetUsersForGroup(Group group) {
-        // query que utiliza a tabela conjuta de users e grupos para devolver os users de um determinado grupo
-        String query = "SELECT u.name " +
+        String query = "SELECT u.id, u.name " +
                 "FROM users u " +
                 "JOIN users_groups ug ON u.id = ug.user_id " +
                 "WHERE ug.group_id = ?";
 
         boolean isSuccess = false;
         String message;
-        List<String> users = new ArrayList<>();
+        List<User> users = new ArrayList<>();
 
         try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
              PreparedStatement stmt = conn.prepareStatement(query)) {
 
-            stmt.setInt(1, group.getId()); // usa o id do grupo
+            stmt.setInt(1, group.getId()); // Use group ID in the query
             ResultSet rs = stmt.executeQuery();
-            // adiciona os nomes dos grupos enquanto existirem mais
+
+            // Add User objects to the list
             while (rs.next()) {
-                users.add(rs.getString("name"));
+                User user = new User(rs.getInt("id"), rs.getString("name"));
+                users.add(user);
+                Logger.info("Fetched user: ID=" + user.getId() + ", Name=" + user.getName());
             }
 
             if (users.isEmpty()) {
@@ -195,8 +359,14 @@ public class ClientHandler implements Runnable {
             Logger.error("Database error while fetching users: " + e.getMessage());
         }
 
+        // Send a list of User objects
+        Logger.info("Sending users to client: " + gson.toJson(users));
         sendResponse(new ServerResponse(isSuccess, message, users));
     }
+
+
+
+
 
 
 

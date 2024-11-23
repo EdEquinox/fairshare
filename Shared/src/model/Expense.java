@@ -7,16 +7,20 @@ public class Expense {
     private double amount;
     private String description;
     private String date;
+    private int addedBy;
 
-    public Expense(int id, int groupId, int paidBy, double amount, String description, String date) {
+    // Full constructor including addedBy
+    public Expense(int id, int groupId, int paidBy, int addedBy, double amount, String description, String date) {
         this.id = id;
         this.groupId = groupId;
         this.paidBy = paidBy;
+        this.addedBy = addedBy;
         this.amount = amount;
         this.description = description;
         this.date = date;
     }
 
+    // Getters and setters
     public int getId() {
         return id;
     }
@@ -63,5 +67,27 @@ public class Expense {
 
     public void setDate(String date) {
         this.date = date;
+    }
+
+    public int getAddedBy() {
+        return addedBy;
+    }
+
+    public void setAddedBy(int addedBy) {
+        this.addedBy = addedBy;
+    }
+
+    // toString for debugging and logging purposes
+    @Override
+    public String toString() {
+        return "Expense{" +
+                "id=" + id +
+                ", groupId=" + groupId +
+                ", paidBy=" + paidBy +
+                ", addedBy=" + addedBy +
+                ", amount=" + amount +
+                ", description='" + description + '\'' +
+                ", date='" + date + '\'' +
+                '}';
     }
 }
