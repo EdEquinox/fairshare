@@ -13,5 +13,7 @@
     <orderEntry type="library" exported="" name="javafx" level="application" />
     <orderEntry type="library" name="github.javaxcel.core" level="project" />
     <orderEntry type="library" name="sun.mail.javax" level="project" />
+    <orderEntry type="module" module-name="Server" exported="" />
+    <orderEntry type="module" module-name="Shared" />
   </component>
 </module>

@@ -1,19 +1,15 @@
-import com.google.gson.reflect.TypeToken;
 import com.google.gson.Gson;
 import model.*;
 import utils.Logger;
-import com.google.gson.Gson;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.lang.reflect.Type;
+import java.io.*;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.Socket;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.HashSet;
 
 public class ClientHandler implements Runnable {
     private final Socket clientSocket;
@@ -21,14 +17,19 @@ public class ClientHandler implements Runnable {
     private BufferedReader in;
     private final String databasePath;
     private static final Gson gson = new Gson();
+    private final static String MULTICAST_ADDRESS = "230.44.44.44";
+    private final static int MULTICAST_PORT = 4444;
+    private int version;
 
     public ClientHandler(Socket clientSocket, String databasePath) {
         this.clientSocket = clientSocket;
         this.databasePath = databasePath;
+        this.version = 1;
     }
 
     @Override
     public void run() {
+
         try {
             out = new PrintWriter(clientSocket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
@@ -36,6 +37,15 @@ public class ClientHandler implements Runnable {
             String command;
             while ((command = in.readLine()) != null) {
                 Logger.info("Received command: " + command);
+
+                if (command.equals("GET_DATABASE_FILE")) {
+                    sendDatabaseFile(clientSocket);
+                    continue;
+                }
+                if (command.equals("GET_VERSION")) {
+                    sendVersion(clientSocket);
+                    continue;
+                }
 
                 try {
                     Message message = gson.fromJson(command, Message.class); // Parseia diretamente o comando JSON
@@ -76,13 +86,11 @@ public class ClientHandler implements Runnable {
                             handleGetInvites(user);
                         }
                         case Message.Type.INVITE -> {
-                            Type payloadType = new TypeToken<ArrayList<Object>>() {}.getType();
-                            ArrayList<Object> payload = gson.fromJson(gson.toJson(message.payload()), payloadType);
-                            Type groupType = new TypeToken<Group>() {}.getType();
-                            Type userType = new TypeToken<User>() {}.getType();
-                            Group group = gson.fromJson(gson.toJson(payload.get(0)), groupType);
-                            User user = gson.fromJson(gson.toJson(payload.get(1)), userType);
-                            sendInvite(user, group);
+                            ArrayList<Object> payload = gson.fromJson(gson.toJson(message.payload()), ArrayList.class);
+                            Group group = gson.fromJson(gson.toJson(payload.get(0)), Group.class);
+                            User user = gson.fromJson(gson.toJson(payload.get(1)), User.class);
+                            String email = gson.fromJson(gson.toJson(payload.get(2)), String.class);
+                            sendInvite(user, group, email);
                         }
                         case Message.Type.GET_USERS_FOR_GROUP -> {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
@@ -91,6 +99,26 @@ public class ClientHandler implements Runnable {
                         case Message.Type.GET_EXPENSES -> {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
                             handleGetExpenses(group);
+                        }
+                        case Message.Type.BACKUP_INIT -> {
+                            sendDatabaseFile(clientSocket);
+                        }
+                        case Message.Type.ACCEPT_INVITE -> {
+                            ArrayList<Object> payload = gson.fromJson(gson.toJson(message.payload()), ArrayList.class);
+                            Invite invite = gson.fromJson(gson.toJson(payload.get(0)), Invite.class);
+                            User user = gson.fromJson(gson.toJson(payload.get(1)), User.class);
+                            acceptInvite(invite, user);
+                        }
+                        case Message.Type.DECLINE_INVITE -> {
+                            ArrayList<Object> payload = gson.fromJson(gson.toJson(message.payload()), ArrayList.class);
+                            Invite invite = gson.fromJson(gson.toJson(payload.get(0)), Invite.class);
+                            User user = gson.fromJson(gson.toJson(payload.get(1)), User.class);
+                            declineInvite(invite, user);
+                        }
+                        case Message.Type.GET_GROUP_NAME -> {
+                            int groupId = gson.fromJson(gson.toJson(message.payload()), Integer.class);
+                            String groupName = getGroupNamefromDB(groupId);
+                            sendResponse(new ServerResponse(true, "Group name retrieved successfully", groupName));
                         }
                         case Message.Type.GET_EXPENSES_USER -> {
                             int userId = gson.fromJson(gson.toJson(message.payload()), Integer.class); // Deserialize as int
@@ -115,8 +143,8 @@ public class ClientHandler implements Runnable {
                     Logger.error("Error receiving message: " + e.getMessage());
                     sendResponse(new ServerResponse(false, "Internal Server Error...", null));
                 }
-
             }
+
         } catch (IOException e) {
             Logger.error("Error handling client: " + e.getMessage());
         } finally {
@@ -270,6 +298,173 @@ public class ClientHandler implements Runnable {
         sendResponse(new ServerResponse(isSuccess, message, expenses));
     }
 
+    private void acceptInvite(Invite invite, User user) {
+        String url = "jdbc:sqlite:" + databasePath;
+        String updateSQL = "UPDATE group_invites SET status = 'accepted' WHERE id = ? AND invited_user = ?";
+        String insertUserGroupSQL = "INSERT INTO users_groups (user_id, group_id) VALUES (?, ?)";
+        String checkUserGroupSQL = "SELECT COUNT(*) FROM users_groups WHERE user_id = ? AND group_id = ?";
+        boolean isSuccess = false;
+        String message;
+        try (Connection conn = DriverManager.getConnection(url)) {
+            conn.setAutoCommit(false);
+
+            try (PreparedStatement checkUserGroupStmt = conn.prepareStatement(checkUserGroupSQL)) {
+                checkUserGroupStmt.setInt(1, user.getId());
+                checkUserGroupStmt.setInt(2, invite.getGroupId());
+                ResultSet rs = checkUserGroupStmt.executeQuery();
+                if (rs.next() && rs.getInt(1) > 0) {
+                    Logger.info("User already associated with group: User ID " + user.getId() + ", Group ID " + invite.getGroupId());
+                    message = "User already associated with group";
+                    sendResponse(new ServerResponse(isSuccess, message, null));
+                    return;
+                }
+            }
+
+            try (PreparedStatement updateStmt = conn.prepareStatement(updateSQL)) {
+                updateStmt.setInt(1, invite.getId());
+                updateStmt.setInt(2, user.getId());
+                updateStmt.executeUpdate();
+                Logger.info("Invite accepted successfully");
+            }
+
+            try (PreparedStatement insertUserGroupStmt = conn.prepareStatement(insertUserGroupSQL)) {
+                insertUserGroupStmt.setInt(1, user.getId());
+                insertUserGroupStmt.setInt(2, invite.getGroupId());
+                insertUserGroupStmt.executeUpdate();
+                Logger.info("User associated with group: User ID " + user.getId() + ", Group ID " + invite.getGroupId());
+            }
+
+            conn.commit();
+            updateVersion();
+            updateSQL = "UPDATE group_invites SET status = 'accepted' WHERE id = " + invite.getId() + " AND invited_user = " + user.getId();
+            sendHeartbeat(updateSQL, getVersion());
+            updateVersion();
+            insertUserGroupSQL = "INSERT INTO users_groups (user_id, group_id) VALUES (" + user.getId() + ", " + invite.getGroupId() + ")";
+            sendHeartbeat(insertUserGroupSQL, getVersion());
+            isSuccess = true;
+            message = "Invite accepted successfully";
+            sendResponse(new ServerResponse(isSuccess, message, null));
+        } catch (SQLException e) {
+            Logger.error("Database error while accepting invite: " + e.getMessage());
+            message = "Error while accepting invite";
+            isSuccess = false;
+            sendResponse(new ServerResponse(isSuccess, message, null));
+        }
+
+    }
+
+    private void declineInvite(Invite invite, User user) {
+        String url = "jdbc:sqlite:" + databasePath;
+        String updateSQL = "UPDATE group_invites SET status = 'declined' WHERE id = ? AND invited_user = ?";
+
+        boolean isSuccess = false;
+        String message;
+
+        try (Connection conn = DriverManager.getConnection(url)) {
+            try (PreparedStatement updateStmt = conn.prepareStatement(updateSQL)) {
+                updateStmt.setInt(1, invite.getId());
+                updateStmt.setInt(2, user.getId());
+                updateStmt.executeUpdate();
+                Logger.info("Invite declined successfully");
+                isSuccess = true;
+                message = "Invite declined successfully";
+            }
+        } catch (SQLException e) {
+            Logger.error("Database error while declining invite: " + e.getMessage());
+            message = "Error while declining invite";
+            isSuccess = false;
+        }
+
+        updateVersion();
+        updateSQL = "UPDATE group_invites SET status = 'declined' WHERE id = " + invite.getId() + " AND invited_user = " + user.getId();
+        sendHeartbeat(updateSQL, getVersion());
+
+
+        sendResponse(new ServerResponse(isSuccess, message, null));
+
+    }
+
+    private int getVersion() {
+        String url = "jdbc:sqlite:" + databasePath;
+        String query = "SELECT version FROM version";
+        int version = 0;
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                version = rs.getInt("version");
+            }
+        } catch (SQLException e) {
+            Logger.error("Error getting version: " + e.getMessage());
+        }
+
+        return version;
+    }
+
+    private void updateVersion() {
+        String url = "jdbc:sqlite:" + databasePath;
+        String updateSQL = "UPDATE version SET version = version + 1";
+
+        try (Connection conn = DriverManager.getConnection(url);
+             PreparedStatement stmt = conn.prepareStatement(updateSQL)) {
+            stmt.executeUpdate();
+            Logger.info("Version updated successfully");
+        } catch (SQLException e) {
+            Logger.error("Error updating version: " + e.getMessage());
+        }
+    }
+
+    private void sendVersion(Socket clientSocket) {
+        try {
+            Logger.info("Sending version to client...");
+            out.println(getVersion());
+            out.flush();
+            Logger.info("Version sent successfully: " + getVersion());
+        } catch (Exception e) {
+            Logger.error("Error sending version: " + e.getMessage());
+        }
+    }
+
+    private void sendDatabaseFile(Socket clientSocket) {
+        try (FileInputStream fis = new FileInputStream(databasePath);
+        OutputStream os = clientSocket.getOutputStream()) {
+            Logger.info("Sending database file to client...");
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+
+            while ((bytesRead = fis.read(buffer)) != -1) {
+                os.write(buffer, 0, bytesRead);
+                Logger.info("bytesRead: " + bytesRead);
+            }
+            os.flush();
+            Logger.info("buffer" + buffer.length);
+            Logger.info("Database file sent successfully.");
+
+        } catch (Exception e) {
+            Logger.error("Error sending database file: " + e.getMessage());
+        }
+    }
+
+    private void sendHeartbeat(String query, Integer version) {
+        Logger.info("Sending heartbeat from main server...");
+        ArrayList<Object> payload = new ArrayList<>();
+        payload.add(query);
+        payload.add(version);
+
+        try (DatagramSocket socket = new DatagramSocket()) {
+            InetAddress group = InetAddress.getByName(MULTICAST_ADDRESS);
+            ServerResponse response = new ServerResponse(true, "Heartbeat sent successfully", payload);
+            byte[] data = gson.toJson(response).getBytes();
+            DatagramPacket packet = new DatagramPacket(data, data.length, group, MULTICAST_PORT);
+            socket.send(packet);
+            Logger.info("Heartbeat sent successfully, Version: " + version);
+
+        } catch (Exception e) {
+            Logger.error("Error sending heartbeat: " + e.getMessage());
+        }
+
+    }
 
     private void handleGetExpenses(Group group) {
         String query = "SELECT id, group_id, paid_by, added_by, amount, description, date " +
@@ -317,11 +512,6 @@ public class ClientHandler implements Runnable {
         sendResponse(new ServerResponse(isSuccess, message, expenses));
     }
 
-
-
-
-
-
     private void handleGetUsersForGroup(Group group) {
         String query = "SELECT u.id, u.name " +
                 "FROM users u " +
@@ -363,12 +553,6 @@ public class ClientHandler implements Runnable {
         Logger.info("Sending users to client: " + gson.toJson(users));
         sendResponse(new ServerResponse(isSuccess, message, users));
     }
-
-
-
-
-
-
 
     private void handleGetGroups(User user) {
 
@@ -421,10 +605,6 @@ public class ClientHandler implements Runnable {
         sendResponse(new ServerResponse(isSuccess, message, groups));
     }
 
-
-
-
-
     private void handleCreateGroup(Group group) {
         String url = "jdbc:sqlite:" + databasePath;
 
@@ -459,6 +639,7 @@ public class ClientHandler implements Runnable {
                         insertGroupStmt.setString(1, group.name());
                         insertGroupStmt.executeUpdate();
 
+
                         try (ResultSet generatedKeys = insertGroupStmt.getGeneratedKeys()) {
                             if (generatedKeys.next()) {
                                 groupId = generatedKeys.getInt(1);
@@ -475,10 +656,17 @@ public class ClientHandler implements Runnable {
                 insertUserGroupStmt.setInt(1, group.ownerId());
                 insertUserGroupStmt.setInt(2, groupId);
                 insertUserGroupStmt.executeUpdate();
+
                 Logger.info("User associated with group: User ID " + group.ownerId() + ", Group ID " + groupId);
             }
 
             conn.commit();
+            updateVersion();
+            insertGroupSQL = "INSERT INTO groups (name) VALUES ('" + group.name() + "')";
+            sendHeartbeat(insertGroupSQL, getVersion());
+            updateVersion();
+            insertUserGroupSQL = "INSERT INTO users_groups (user_id, group_id) VALUES (" + group.ownerId() + ", " + groupId + ")";
+            sendHeartbeat(insertUserGroupSQL, getVersion());
             isSuccess = true;
             message = "Group created successfully";
         } catch (SQLException e) {
@@ -490,32 +678,78 @@ public class ClientHandler implements Runnable {
         sendResponse(new ServerResponse(isSuccess, message, null));
     }
 
+    private String getGroupNamefromDB(int groupId) {
+        String query = "SELECT name FROM groups WHERE id = ?";
+        try(Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath + "/db.db");
+            PreparedStatement preparedStatement = connection.prepareStatement(query);) {
+            preparedStatement.setInt(1, groupId);
+            ResultSet resultSet = preparedStatement.executeQuery();
+            String groupName = resultSet.getString("name");
+            connection.close();
+            return groupName;
+        } catch (Exception e) {
+            Logger.error("Error getting group name: " + e.getMessage());
+            return null;
+        }
+    }
+
     private void handleGetInvites(User user) {
 
+        String url = "jdbc:sqlite:" + databasePath;
+        String querySQL = "SELECT gi.id, gi.group_id, gi.invited_user, gi.invited_by, gi.status, g.name AS group_name " +
+                "FROM group_invites gi " +
+                "JOIN groups g ON gi.group_id = g.id " +
+                "WHERE gi.invited_user = ? AND gi.status = 'pending'";
+
+        String groupNameQuery = "SELECT name FROM groups WHERE id = ?";
+        String inviterNameQuery = "SELECT name FROM users WHERE id = ?";
+        String groupName;
+        String inviterName;
         boolean isSuccess = false;
         String message;
-        ArrayList<Group> invites = new ArrayList<Group>();
+        List<Invite> invites = new ArrayList<>();
 
-        String url = "jdbc:sqlite:" + databasePath;
-        String querySQL = "SELECT g.name, g.id " + "FROM group_invites gi " + "JOIN groups g ON gi.group_id = g.id " + "WHERE gi.invited_user = ?";
+        try (Connection conn = DriverManager.getConnection(url)) {
+            try (PreparedStatement inviterNameStmt = conn.prepareStatement(inviterNameQuery)) {
+                try (PreparedStatement groupNameStmt = conn.prepareStatement(groupNameQuery)) {
+                    try (PreparedStatement stmt = conn.prepareStatement(querySQL)) {
+                        stmt.setInt(1, user.getId());
+                        ResultSet rs = stmt.executeQuery();
+                        while (rs.next()) {
+                            groupNameStmt.setInt(1, rs.getInt("group_id"));
+                            inviterNameStmt.setInt(1, rs.getInt("invited_by"));
+                            ResultSet rs2 = groupNameStmt.executeQuery();
+                            ResultSet rs3 = inviterNameStmt.executeQuery();
+                            if (rs2.next()) {
+                                groupName = rs2.getString("name");
+                                inviterName = rs3.getString("name");
+                                invites.add(new Invite(
+                                        rs.getInt("id"),
+                                        rs.getInt("group_id"),
+                                        rs.getInt("invited_by"),
+                                        rs.getInt("invited_user"),
+                                        groupName,
+                                        inviterName
+                                ));
+                            }
+                        }
+                        if (invites.isEmpty()) {
+                            message = "No invites found for the user.";
+                            Logger.info("No invites found for user ID: " + user.getId());
+                        } else {
+                            isSuccess = true;
+                            message = "Invites retrieved successfully.";
+                            Logger.info("Invites retrieved for user ID: " + user.getId() + ": " + invites);
+                        }
 
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement stmt = conn.prepareStatement(querySQL)) {
-
-            stmt.setInt(1, user.getId());
-            ResultSet rs = stmt.executeQuery();
-
-            while (rs.next()) {
-                invites.add(new Group(rs.getString("name"), rs.getInt("id")));
+                    }
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-
-            isSuccess = true;
-            message = "Invites fetched successfully";
-
         } catch (SQLException e) {
+            message = "Error while retrieving invites";
             Logger.error("Database error while fetching invites: " + e.getMessage());
-            message = "Database error while fetching invites";
-            isSuccess = false;
         }
 
         sendResponse(new ServerResponse(isSuccess, message, invites));
@@ -549,6 +783,9 @@ public class ClientHandler implements Runnable {
             stmt.setString(1, String.valueOf(user.getId()));
 
             int rowsAffected = stmt.executeUpdate();
+            updateVersion();
+            updateSQL = "UPDATE users WHERE id = " + user.getId();
+            sendHeartbeat(updateSQL, getVersion());
             if (rowsAffected > 0) {
                 isSuccess = true;
                 message = "User profile updated successfully";
@@ -622,6 +859,9 @@ public class ClientHandler implements Runnable {
                 insertStmt.setString(3, user.getPhone());
                 insertStmt.setString(4, user.getPassword());
                 insertStmt.executeUpdate();
+                updateVersion();
+                insertSQL = "INSERT INTO users (name, email, phone, password) VALUES ('" + user.getName() + "', '" + user.getEmail() + "', '" + user.getPhone() + "', '" + user.getPassword() + "')";
+                sendHeartbeat(insertSQL, getVersion());
                 isSuccess = true;
                 message = "User registered successfully";
                 Logger.info("User added successfully to the database: " + user.getName());
@@ -673,7 +913,7 @@ public class ClientHandler implements Runnable {
         sendResponse(response);
     }
 
-    private void sendInvite(User user, Group group) {
+    private void sendInvite(User user, Group group, String email) {
         String url = "jdbc:sqlite:" + databasePath;
         String checkInviteeSQL = "SELECT COUNT(*) FROM users WHERE email = ?";
         String checkGroupSQL = "SELECT COUNT(*) FROM groups WHERE id = ?";
@@ -682,32 +922,67 @@ public class ClientHandler implements Runnable {
         try (Connection conn = DriverManager.getConnection(url)) {
             // Check if the invitee email exists
             try (PreparedStatement checkInviteeStmt = conn.prepareStatement(checkInviteeSQL)) {
-                checkInviteeStmt.setString(1, user.getEmail());
+                checkInviteeStmt.setString(1, email);
                 ResultSet rs = checkInviteeStmt.executeQuery();
                 if (!rs.next() || rs.getInt(1) == 0) {
-                    Logger.error("Invitee email not found in the database: " + user.getEmail());
+                    Logger.error("Invitee email not found in the database: " + email);
                     sendResponse(new ServerResponse(false, "Error: Invitee email not found", null));
+                    return;
                 }
                 Logger.info("Invitee email found in the database: " + user.getEmail());
             }
 
             // Check if the group exists
             try (PreparedStatement checkGroupStmt = conn.prepareStatement(checkGroupSQL)) {
-                checkGroupStmt.setInt(1, group.getOwnerId());
+                checkGroupStmt.setInt(1, group.getId());
                 ResultSet rs = checkGroupStmt.executeQuery();
                 if (!rs.next() || rs.getInt(1) == 0) {
                     Logger.error("Group not found in the database: " + group.getName());
                     sendResponse(new ServerResponse(false, "Error: Group not found", null));
+                    return;
                 }
                 Logger.info("Group found in the database: " + group.getName());
+            }
+
+            //Get invitee user
+            String getUserSQL = "SELECT id FROM users WHERE email = ?";
+            int inviteeId = 0;
+            try (PreparedStatement getUserStmt = conn.prepareStatement(getUserSQL)) {
+                getUserStmt.setString(1, email);
+                ResultSet rs = getUserStmt.executeQuery();
+                if (rs.next()) {
+                    inviteeId = rs.getInt("id");
+                    Logger.info("User found in the database: " + email);
+                } else {
+                    Logger.error("User not found in the database: " + email);
+                    sendResponse(new ServerResponse(false, "Error: User not found", null));
+                    return;
+                }
+            }
+
+            // Check if the invitee is already a member of the group
+            String checkUserGroupSQL = "SELECT COUNT(*) FROM users_groups WHERE user_id = ? AND group_id = ?";
+            try (PreparedStatement checkUserGroupStmt = conn.prepareStatement(checkUserGroupSQL)) {
+                checkUserGroupStmt.setInt(1, inviteeId);
+                checkUserGroupStmt.setInt(2, group.getId());
+                ResultSet rs = checkUserGroupStmt.executeQuery();
+                if (rs.next() && rs.getInt(1) > 0) {
+                    Logger.error("User is already a member of the group: " + group.getName());
+                    sendResponse(new ServerResponse(false, "Error: User is already a member of the group", null));
+                    return;
+                }
+                Logger.info("User is not a member of the group: " + user.getName());
             }
 
             // Insert the invite
             try (PreparedStatement insertStmt = conn.prepareStatement(insertSQL)) {
                 insertStmt.setInt(1, group.getOwnerId());
-                insertStmt.setInt(2, user.getId());
+                insertStmt.setInt(2, inviteeId);
                 insertStmt.setInt(3, user.getId());
                 insertStmt.executeUpdate();
+                updateVersion();
+                insertSQL = "INSERT INTO group_invites (group_id, invited_user, invited_by, status) VALUES (" + group.getOwnerId() + ", " + inviteeId + ", " + user.getId() + ", 'pending')";
+                sendHeartbeat(insertSQL, getVersion());
                 Logger.info("Invite sent successfully");
                 sendResponse(new ServerResponse(true, "Invite sent successfully", null));
             }
