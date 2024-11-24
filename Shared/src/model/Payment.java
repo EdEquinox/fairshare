@@ -7,14 +7,24 @@ public class Payment {
     private int receivedBy;
     private double amount;
     private String date;
+    private String paidByName; // Nome do pagador
+    private String receivedByName; // Nome do recebedor
 
-    public Payment(int id, int groupId, int paidBy, int receivedBy, double amount, String date) {
+    // Construtor completo
+    public Payment(int id, int groupId, int paidBy, int receivedBy, double amount, String date, String paidByName, String receivedByName) {
         this.id = id;
         this.groupId = groupId;
         this.paidBy = paidBy;
         this.receivedBy = receivedBy;
         this.amount = amount;
         this.date = date;
+        this.paidByName = paidByName;
+        this.receivedByName = receivedByName;
+    }
+
+    // Construtor sem nomes (para cenários onde os nomes não são necessários)
+    public Payment(int id, int groupId, int paidBy, int receivedBy, double amount, String date) {
+        this(id, groupId, paidBy, receivedBy, amount, date, null, null);
     }
 
     public int getId() {
@@ -65,6 +75,22 @@ public class Payment {
         this.date = date;
     }
 
+    public String getPaidByName() {
+        return paidByName;
+    }
+
+    public void setPaidByName(String paidByName) {
+        this.paidByName = paidByName;
+    }
+
+    public String getReceivedByName() {
+        return receivedByName;
+    }
+
+    public void setReceivedByName(String receivedByName) {
+        this.receivedByName = receivedByName;
+    }
+
     @Override
     public String toString() {
         return "Payment{" +
@@ -74,6 +100,8 @@ public class Payment {
                 ", receivedBy=" + receivedBy +
                 ", amount=" + amount +
                 ", date='" + date + '\'' +
+                ", paidByName='" + paidByName + '\'' +
+                ", receivedByName='" + receivedByName + '\'' +
                 '}';
     }
 }
