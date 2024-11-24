@@ -1,6 +1,7 @@
 package controller;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import communication.ClientService;
 import javafx.fxml.Initializable;
 import javafx.scene.control.PasswordField;
@@ -10,6 +11,7 @@ import model.ServerResponse;
 import model.User;
 import utils.*;
 
+import java.io.IOException;
 import java.net.URL;
 import java.util.Base64;
 import java.util.ResourceBundle;
@@ -20,6 +22,9 @@ public class LoginController implements Initializable {
     public PasswordField passwordField;
 
     private ClientService clientService;
+
+    private static final Gson gson = new Gson();
+
 
     /**
      * Handles the login action when the user clicks the login button.
@@ -67,31 +72,70 @@ public class LoginController implements Initializable {
      * @param password the password entered by the user
      */
     private void processLogin(String email, String password) {
-        Logger.debug("Sending login request to the server for email: " + email);
+        Logger.debug("Initiating login process for email: " + email);
 
-        // Encrypt password:
-        Base64.Encoder encoder = Base64.getEncoder();
-        String encryptedPassword = encoder.encodeToString(password.getBytes());
+        // Validate input fields
+        if (email == null || email.isBlank()) {
+            AlertUtils.showError("Login Error", "Email cannot be empty.");
+            return;
+        }
 
-        ServerResponse response = clientService.sendRequest(new Message(Message.Type.LOGIN, new User(null, email, null, encryptedPassword)));
+        if (password == null || password.isBlank()) {
+            AlertUtils.showError("Login Error", "Password cannot be empty.");
+            return;
+        }
+
         try {
+            // Encrypt password
+            String encryptedPassword = Base64.getEncoder().encodeToString(password.getBytes());
+            Logger.debug("Password encrypted successfully.");
+
+            // Create a login message
+            Message loginMessage = new Message(Message.Type.LOGIN, new User(email, encryptedPassword));
+            Logger.debug("Login message created: " + new Gson().toJson(loginMessage));
+
+            // Send the request to the server
+            ServerResponse response = clientService.sendRequest(loginMessage);
+
             javafx.application.Platform.runLater(() -> {
                 if (response.isSuccess()) {
-                    Logger.info("Login successful for user.");
-                    User user = new Gson().fromJson(response.payload().toString(), User.class);
-                    clientService.setCurrentUser(user);
-                    // Guarda o utilizador que fez login em sharedstate
-                    SharedState.setCurrentUser(user);
-                    NavigationManager.switchScene(Routes.DASHBOARD);
+                    try {
+                        Logger.info("Server response received: " + response.payload());
+
+                        // Validate that payload contains a valid JSON object
+                        String payloadJson = response.payload().toString();
+                        if (payloadJson == null || payloadJson.isBlank()) {
+                            throw new IllegalArgumentException("Payload is empty or null.");
+                        }
+
+                        // Deserialize JSON payload into a User object
+                        User user = gson.fromJson(gson.toJson(response.payload()), User.class);
+                        if (user == null) {
+                            throw new IllegalStateException("Failed to parse user information from payload.");
+                        }
+
+                        // Save user information and navigate to the dashboard
+                        clientService.setCurrentUser(user);
+                        SharedState.setCurrentUser(user);
+                        Logger.info("Login successful for user: " + user.getEmail());
+                        NavigationManager.switchScene(Routes.DASHBOARD);
+                    } catch (JsonSyntaxException e) {
+                        Logger.error("Error parsing JSON payload: " + e.getMessage());
+                        AlertUtils.showError("Login Error", "Failed to parse server response. Please contact support.");
+                    } catch (Exception e) {
+                        Logger.error("Unexpected error: " + e.getMessage());
+                        AlertUtils.showError("Login Error", "An unexpected error occurred. Please try again.");
+                    }
                 } else {
                     Logger.error("Login failed: " + response.message());
                     AlertUtils.showError("Login Failed", response.message());
                 }
             });
+
         } catch (Exception e) {
-            Logger.error("Error processing server response: " + e.getMessage());
+            Logger.error("Error during login process: " + e.getMessage());
             javafx.application.Platform.runLater(() ->
-                    AlertUtils.showError("Login Error", "Unexpected server response.")
+                    AlertUtils.showError("Login Error", "Failed to communicate with the server. Please try again later.")
             );
         }
     }

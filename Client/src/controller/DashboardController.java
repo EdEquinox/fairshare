@@ -16,11 +16,7 @@ import model.Group;
 import model.Message;
 import model.ServerResponse;
 import model.User;
-import utils.AlertUtils;
-import utils.CSVUtils;
-import utils.Logger;
-import utils.NavigationManager;
-import utils.Routes;
+import utils.*;
 
 import java.io.File;
 import java.lang.reflect.Type;
@@ -120,8 +116,6 @@ public class DashboardController implements Initializable {
         // Fetch initial group data
         fetchGroups();
     }
-
-
 
     private void fetchGroups() {
         new Thread(() -> {
