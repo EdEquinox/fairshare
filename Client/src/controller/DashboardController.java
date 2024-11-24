@@ -42,6 +42,12 @@ public class DashboardController implements Initializable {
     private ListView<User> userListView;
 
     @FXML
+    private ListView<String> payListView;
+
+    @FXML
+    private ListView<String> receiveListView;
+
+    @FXML
     private TableView<Expense> expensesTableView;
 
     @FXML
@@ -139,6 +145,7 @@ public class DashboardController implements Initializable {
         groupList.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
             handleGroupSelection(newValue);
             groupText.setText(selectedGroup.getName());
+            fetchGroupStats(selectedGroup.getId(), currentUser.getId());
         });
 
         // Clique do botão direito para exibir ContextMenu
@@ -329,6 +336,59 @@ public class DashboardController implements Initializable {
         }
     }
 
+    private void fetchGroupStats(int groupId, int userId) {
+        if (clientService.isClientConnected()) {
+            Map<String, Integer> requestPayload = Map.of("groupId", groupId, "userId", userId);
+            ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_GROUP_STATS, requestPayload));
+
+            javafx.application.Platform.runLater(() -> {
+                if (response.isSuccess()) {
+                    try {
+                        Map<String, Object> stats = gson.fromJson(gson.toJson(response.payload()), new TypeToken<Map<String, Object>>() {
+                        }.getType());
+
+                        // Processar totais
+                        double totalSpent = ((Number) stats.get("totalSpent")).doubleValue();
+                        double totalToPay = ((Number) stats.get("totalToPay")).doubleValue();
+                        double totalToReceive = ((Number) stats.get("totalToReceive")).doubleValue();
+
+                        totalSpentLabel.setText(String.format("Total Spent: $%.2f", totalSpent));
+                        amountToPayLabel.setText(String.format("Total to Pay: $%.2f", totalToPay));
+                        amountToReceiveLabel.setText(String.format("Total to Receive: $%.2f", totalToReceive));
+
+                        // Processar despesas e pagamentos
+                        List<Expense> fetchedExpenses = gson.fromJson(gson.toJson(stats.get("expenses")), new TypeToken<List<Expense>>() {
+                        }.getType());
+                        List<Payment> fetchedPayments = gson.fromJson(gson.toJson(stats.get("payments")), new TypeToken<List<Payment>>() {
+                        }.getType());
+
+                        // Atualizar payListView (Despesas relacionadas ao usuário como "Paid By")
+                        ObservableList<String> payData = FXCollections.observableArrayList(fetchedExpenses.stream().filter(expense -> expense.getPaidBy() == userId) // Filtro para despesas do usuário
+                                .map(expense -> String.format("Paid by: %s | Amount: $%.2f | Desc: %s", expense.getPaidByName(), expense.getAmount(), expense.getDescription())).toList());
+                        payListView.setItems(payData);
+
+                        // Atualizar receiveListView (Pagamentos onde o usuário é "To")
+                        ObservableList<String> receiveData = FXCollections.observableArrayList(fetchedPayments.stream().filter(payment -> payment.getPaidBy() == userId) // Filtro para pagamentos recebidos pelo usuário
+                                .map(payment -> String.format("From: %s | Amount: $%.2f | Date: %s", payment.getPaidByName(), payment.getAmount(), payment.getDate())).toList());
+                        receiveListView.setItems(receiveData);
+
+                        Logger.info("Group stats fetched and displayed successfully.");
+                    } catch (Exception e) {
+                        Logger.error("Error parsing group stats response: " + e.getMessage());
+                        AlertUtils.showError("Error", "Failed to process server response.");
+                    }
+                } else {
+                    AlertUtils.showError("Error", "Failed to fetch group stats: " + response.message());
+                }
+            });
+        } else {
+            javafx.application.Platform.runLater(() -> {
+                AlertUtils.showError("Error", "Client is not connected to the server.");
+                Logger.error("Client is not connected to the server.");
+            });
+        }
+    }
+
     private void fetchPayments() {
         if (clientService.isClientConnected()) {
             ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_PAYMENTS, selectedGroup.getId()));
@@ -459,17 +519,9 @@ public class DashboardController implements Initializable {
 
     @FXML
     public void handleNewExpense() {
-        List<ComboBoxOption> userOptions = usersInGroup.stream()
-                .map(user -> new ComboBoxOption(user.getId(), user.getName()))
-                .toList();
+        List<ComboBoxOption> userOptions = usersInGroup.stream().map(user -> new ComboBoxOption(user.getId(), user.getName())).toList();
 
-        List<FieldConfig> fields = Arrays.asList(
-                new FieldConfig<>("date", "Date", null, FieldType.DATE, true, null, null),
-                new FieldConfig<>("description", "Description", "Enter expense description", FieldType.TEXT, true, null, null),
-                new FieldConfig<>("amount", "Value", "Enter the amount", FieldType.TEXT, true, null, null),
-                new FieldConfig<>("paidBy", "Paid By", "Select who paid", FieldType.COMBOBOX, true, null, userOptions),
-                new FieldConfig<>("sharedWith", "Shared With", "Select users to share with", FieldType.MULTI_SELECT, true, null, userOptions)
-        );
+        List<FieldConfig> fields = Arrays.asList(new FieldConfig<>("date", "Date", null, FieldType.DATE, true, null, null), new FieldConfig<>("description", "Description", "Enter expense description", FieldType.TEXT, true, null, null), new FieldConfig<>("amount", "Value", "Enter the amount", FieldType.TEXT, true, null, null), new FieldConfig<>("paidBy", "Paid By", "Select who paid", FieldType.COMBOBOX, true, null, userOptions), new FieldConfig<>("sharedWith", "Shared With", "Select users to share with", FieldType.MULTI_SELECT, true, null, userOptions));
 
         Dialog<Map<String, Object>> dialog = CustomDialog.createDialog("Add New Expense", fields);
 
@@ -491,26 +543,12 @@ public class DashboardController implements Initializable {
                 }
 
                 // Converter a lista de ComboBoxOption para uma String separada por vírgulas
-                String sharedWithNames = sharedWith.stream()
-                        .map(ComboBoxOption::getName)
-                        .reduce((name1, name2) -> name1 + ", " + name2)
-                        .orElse("");
+                String sharedWithNames = sharedWith.stream().map(ComboBoxOption::getName).reduce((name1, name2) -> name1 + ", " + name2).orElse("");
 
-                List<Integer> sharedWithIds = sharedWith.stream()
-                        .map(ComboBoxOption::getId)
-                        .toList();
+                List<Integer> sharedWithIds = sharedWith.stream().map(ComboBoxOption::getId).toList();
 
                 Expense newExpense = new Expense(0, // ID será definido pelo servidor
-                        selectedGroup.getId(),
-                        paidBy.getId(),
-                        currentUser.getId(),
-                        amount,
-                        description,
-                        formattedDate,
-                        sharedWithIds,
-                        paidBy.getName(),
-                        sharedWithNames
-                );
+                        selectedGroup.getId(), paidBy.getId(), currentUser.getId(), amount, description, formattedDate, sharedWithIds, paidBy.getName(), sharedWithNames);
 
                 new Thread(() -> {
                     ServerResponse response = clientService.sendRequest(new Message(Message.Type.ADD_EXPENSE, newExpense));
@@ -538,26 +576,13 @@ public class DashboardController implements Initializable {
             return;
         }
 
-        List<ComboBoxOption> userOptions = usersInGroup.stream()
-                .map(user -> new ComboBoxOption(user.getId(), user.getName()))
-                .toList();
+        List<ComboBoxOption> userOptions = usersInGroup.stream().map(user -> new ComboBoxOption(user.getId(), user.getName())).toList();
 
-        ComboBoxOption selectedPaidByOption = userOptions.stream()
-                .filter(option -> option.getId() == selectedExpense.getPaidBy())
-                .findFirst()
-                .orElse(null);
+        ComboBoxOption selectedPaidByOption = userOptions.stream().filter(option -> option.getId() == selectedExpense.getPaidBy()).findFirst().orElse(null);
 
-        List<ComboBoxOption> selectedSharedWithOptions = userOptions.stream()
-                .filter(option -> selectedExpense.getSharedWith().contains(option.getId()))
-                .toList();
+        List<ComboBoxOption> selectedSharedWithOptions = userOptions.stream().filter(option -> selectedExpense.getSharedWith().contains(option.getId())).toList();
 
-        List<FieldConfig> fields = Arrays.asList(
-                new FieldConfig<>("date", "Date", null, FieldType.DATE, true, LocalDate.parse(selectedExpense.getDate()), null),
-                new FieldConfig<>("description", "Description", "Enter expense description", FieldType.TEXT, true, selectedExpense.getDescription(), null),
-                new FieldConfig<>("amount", "Value", "Enter the amount", FieldType.TEXT, true, String.valueOf(selectedExpense.getAmount()), null),
-                new FieldConfig<>("paidBy", "Paid By", "Select who paid", FieldType.COMBOBOX, true, selectedPaidByOption, userOptions),
-                new FieldConfig<>("sharedWith", "Shared With", "Select users to share with", FieldType.MULTI_SELECT, true, selectedSharedWithOptions, userOptions)
-        );
+        List<FieldConfig> fields = Arrays.asList(new FieldConfig<>("date", "Date", null, FieldType.DATE, true, LocalDate.parse(selectedExpense.getDate()), null), new FieldConfig<>("description", "Description", "Enter expense description", FieldType.TEXT, true, selectedExpense.getDescription(), null), new FieldConfig<>("amount", "Value", "Enter the amount", FieldType.TEXT, true, String.valueOf(selectedExpense.getAmount()), null), new FieldConfig<>("paidBy", "Paid By", "Select who paid", FieldType.COMBOBOX, true, selectedPaidByOption, userOptions), new FieldConfig<>("sharedWith", "Shared With", "Select users to share with", FieldType.MULTI_SELECT, true, selectedSharedWithOptions, userOptions));
 
         Dialog<Map<String, Object>> dialog = CustomDialog.createDialog("Edit Expense", fields);
 
@@ -578,9 +603,7 @@ public class DashboardController implements Initializable {
                     return;
                 }
 
-                List<Integer> sharedWithIds = sharedWith.stream()
-                        .map(ComboBoxOption::getId)
-                        .toList();
+                List<Integer> sharedWithIds = sharedWith.stream().map(ComboBoxOption::getId).toList();
 
                 selectedExpense.setDate(formattedDate);
                 selectedExpense.setDescription(description);
@@ -613,14 +636,11 @@ public class DashboardController implements Initializable {
             return;
         }
 
-        boolean confirmed = AlertUtils.showConfirmation("Delete Expense",
-                "Are you sure you want to delete this expense? This action cannot be undone.");
+        boolean confirmed = AlertUtils.showConfirmation("Delete Expense", "Are you sure you want to delete this expense? This action cannot be undone.");
 
         if (confirmed) {
             new Thread(() -> {
-                ServerResponse response = clientService.sendRequest(
-                        new Message(Message.Type.DELETE_EXPENSE, selectedExpense.getId())
-                );
+                ServerResponse response = clientService.sendRequest(new Message(Message.Type.DELETE_EXPENSE, selectedExpense.getId()));
 
                 javafx.application.Platform.runLater(() -> {
                     if (response.isSuccess()) {
@@ -680,17 +700,10 @@ public class DashboardController implements Initializable {
     @FXML
     public void handleNewPayment() {
         // Convert users in the group to ComboBoxOptions
-        List<ComboBoxOption> userOptions = usersInGroup.stream()
-                .map(user -> new ComboBoxOption(user.getId(), user.getName()))
-                .toList();
+        List<ComboBoxOption> userOptions = usersInGroup.stream().map(user -> new ComboBoxOption(user.getId(), user.getName())).toList();
 
         // Define fields for the dialog
-        List<FieldConfig> fields = Arrays.asList(
-                new FieldConfig<>("date", "Date", null, FieldType.DATE, true, null, null),
-                new FieldConfig<>("amount", "Value", "Enter the payment amount", FieldType.TEXT, true, null, null),
-                new FieldConfig<>("paidBy", "Paid By", "Select payer", FieldType.COMBOBOX, true, null, userOptions),
-                new FieldConfig<>("receivedBy", "Received By", "Select receiver", FieldType.COMBOBOX, true, null, userOptions)
-        );
+        List<FieldConfig> fields = Arrays.asList(new FieldConfig<>("date", "Date", null, FieldType.DATE, true, null, null), new FieldConfig<>("amount", "Value", "Enter the payment amount", FieldType.TEXT, true, null, null), new FieldConfig<>("paidBy", "Paid By", "Select payer", FieldType.COMBOBOX, true, null, userOptions), new FieldConfig<>("receivedBy", "Received By", "Select receiver", FieldType.COMBOBOX, true, null, userOptions));
 
         Dialog<Map<String, Object>> dialog = CustomDialog.createDialog("Add New Payment", fields);
 
@@ -715,14 +728,8 @@ public class DashboardController implements Initializable {
                     return;
                 }
 
-                Payment newPayment = new Payment(
-                        0, // ID will be set by the server
-                        selectedGroup.getId(),
-                        paidBy.getId(),
-                        receivedBy.getId(),
-                        amount,
-                        formattedDate
-                );
+                Payment newPayment = new Payment(0, // ID will be set by the server
+                        selectedGroup.getId(), paidBy.getId(), receivedBy.getId(), amount, formattedDate);
 
                 // Send the new payment to the server
                 new Thread(() -> {
@@ -750,27 +757,14 @@ public class DashboardController implements Initializable {
             return;
         }
 
-        List<ComboBoxOption> userOptions = usersInGroup.stream()
-                .map(user -> new ComboBoxOption(user.getId(), user.getName()))
-                .toList();
+        List<ComboBoxOption> userOptions = usersInGroup.stream().map(user -> new ComboBoxOption(user.getId(), user.getName())).toList();
 
         // Identificar os ComboBoxOptions corretos para PaidBy e ReceivedBy
-        ComboBoxOption selectedPaidByOption = userOptions.stream()
-                .filter(option -> option.getId() == selectedPayment.getPaidBy())
-                .findFirst()
-                .orElse(null);
+        ComboBoxOption selectedPaidByOption = userOptions.stream().filter(option -> option.getId() == selectedPayment.getPaidBy()).findFirst().orElse(null);
 
-        ComboBoxOption selectedReceivedByOption = userOptions.stream()
-                .filter(option -> option.getId() == selectedPayment.getReceivedBy())
-                .findFirst()
-                .orElse(null);
+        ComboBoxOption selectedReceivedByOption = userOptions.stream().filter(option -> option.getId() == selectedPayment.getReceivedBy()).findFirst().orElse(null);
 
-        List<FieldConfig> fields = Arrays.asList(
-                new FieldConfig<>("date", "Date", null, FieldType.DATE, true, LocalDate.parse(selectedPayment.getDate()), null),
-                new FieldConfig<>("amount", "Value", "Enter the payment amount", FieldType.TEXT, true, String.valueOf(selectedPayment.getAmount()), null),
-                new FieldConfig<>("paidBy", "Paid By", "Select who paid", FieldType.COMBOBOX, true, selectedPaidByOption, userOptions),
-                new FieldConfig<>("receivedBy", "Received By", "Select receiver", FieldType.COMBOBOX, true, selectedReceivedByOption, userOptions)
-        );
+        List<FieldConfig> fields = Arrays.asList(new FieldConfig<>("date", "Date", null, FieldType.DATE, true, LocalDate.parse(selectedPayment.getDate()), null), new FieldConfig<>("amount", "Value", "Enter the payment amount", FieldType.TEXT, true, String.valueOf(selectedPayment.getAmount()), null), new FieldConfig<>("paidBy", "Paid By", "Select who paid", FieldType.COMBOBOX, true, selectedPaidByOption, userOptions), new FieldConfig<>("receivedBy", "Received By", "Select receiver", FieldType.COMBOBOX, true, selectedReceivedByOption, userOptions));
 
         Dialog<Map<String, Object>> dialog = CustomDialog.createDialog("Edit Payment", fields);
 
@@ -828,14 +822,11 @@ public class DashboardController implements Initializable {
             return;
         }
 
-        boolean confirmed = AlertUtils.showConfirmation("Delete Payment",
-                "Are you sure you want to delete this payment? This action cannot be undone.");
+        boolean confirmed = AlertUtils.showConfirmation("Delete Payment", "Are you sure you want to delete this payment? This action cannot be undone.");
 
         if (confirmed) {
             new Thread(() -> {
-                ServerResponse response = clientService.sendRequest(
-                        new Message(Message.Type.DELETE_PAYMENT, selectedPayment.getId())
-                );
+                ServerResponse response = clientService.sendRequest(new Message(Message.Type.DELETE_PAYMENT, selectedPayment.getId()));
 
                 javafx.application.Platform.runLater(() -> {
                     if (response.isSuccess()) {
