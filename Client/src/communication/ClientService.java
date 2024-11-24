@@ -155,4 +155,5 @@ public class ClientService {
     public void setCurrentUser(User currentUser) {
         this.currentUser = currentUser;
     }
+
 }
