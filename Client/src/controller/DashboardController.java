@@ -49,6 +49,11 @@ public class DashboardController implements Initializable {
     // ContextMenu for the TableView
     private ContextMenu expensesContextMenu;
 
+    @FXML
+    public TableView<Payment> paymentsTableView;
+
+    private ContextMenu paymentsContextMenu;
+
     private ClientService clientService;
     private ObservableList<Group> groups;
     private ObservableList<User> usersInGroup;
@@ -89,6 +94,24 @@ public class DashboardController implements Initializable {
         expensesTableView.setOnMouseClicked(event -> {
             if (event.isPrimaryButtonDown()) {
                 expensesContextMenu.hide();
+            }
+        });
+
+        // Configure context menu for the paymentsTableView
+        paymentsTableView.setOnContextMenuRequested(event -> {
+            Payment selectedPayment = paymentsTableView.getSelectionModel().getSelectedItem();
+
+            // Enable/Disable context menu items based on the selection
+            configurePaymentsContextMenuItems(selectedPayment);
+
+            // Show the context menu
+            paymentsContextMenu.show(paymentsTableView, event.getScreenX(), event.getScreenY());
+        });
+
+        // Hide context menu on left-click
+        paymentsTableView.setOnMouseClicked(event -> {
+            if (event.isPrimaryButtonDown()) {
+                paymentsContextMenu.hide();
             }
         });
 
@@ -145,6 +168,28 @@ public class DashboardController implements Initializable {
         exportToCsvItem.setOnAction(event -> handleExportToCSV());
 
         expensesContextMenu.getItems().addAll(addExpenseItem, editExpenseItem, removeExpenseItem, exportToCsvItem);
+
+        paymentsContextMenu = new ContextMenu();
+
+        // Add Payment Menu Item
+        MenuItem addPaymentItem = new MenuItem("Add Payment");
+        addPaymentItem.setOnAction(event -> handleNewPayment());
+
+        // Edit Payment Menu Item
+        MenuItem editPaymentItem = new MenuItem("Edit Payment");
+        editPaymentItem.setOnAction(event -> handleEditPayment());
+
+        // Remove Payment Menu Item
+        MenuItem removePaymentItem = new MenuItem("Remove Payment");
+        removePaymentItem.setOnAction(event -> handleDeletePayment());
+
+        // Export to CSV Menu Item
+        MenuItem exportToCsvItem2 = new MenuItem("Export to CSV");
+        exportToCsvItem2.setOnAction(event -> handleExportToCSV());
+
+        // Add items to the context menu
+        paymentsContextMenu.getItems().addAll(addPaymentItem, editPaymentItem, removePaymentItem, exportToCsvItem);
+
     }
 
     private void configureContextMenuItems(Expense selectedExpense) {
@@ -154,6 +199,15 @@ public class DashboardController implements Initializable {
 
         // Enable/Disable "Export to CSV" based on table state
         expensesContextMenu.getItems().get(3).setDisable(expensesTableView.getItems().isEmpty()); // Export to CSV
+    }
+
+    private void configurePaymentsContextMenuItems(Payment selectedPayment) {
+        // Enable/Disable "Edit" and "Remove" based on selection
+        paymentsContextMenu.getItems().get(1).setDisable(selectedPayment == null); // Edit
+        paymentsContextMenu.getItems().get(2).setDisable(selectedPayment == null); // Remove
+
+        // Enable/Disable "Export to CSV" based on table state
+        paymentsContextMenu.getItems().get(3).setDisable(paymentsTableView.getItems().isEmpty()); // Export to CSV
     }
 
     private void fetchGroups() {
@@ -375,21 +429,6 @@ public class DashboardController implements Initializable {
         });
     }
 
-    private void sendExpenseToServer(Expense expense) {
-        new Thread(() -> {
-            ServerResponse response = clientService.sendRequest(new Message(Message.Type.ADD_EXPENSE, expense));
-            javafx.application.Platform.runLater(() -> {
-                if (response.isSuccess()) {
-                    Logger.info("Expense successfully added to server: " + expense);
-                    AlertUtils.showSuccess("Success", "Expense added successfully.");
-                } else {
-                    AlertUtils.showError("Error", "Failed to add expense to server: " + response.message());
-                    Logger.error("Failed to add expense to server: " + response.message());
-                }
-            });
-        }).start();
-    }
-
     @FXML
     public void handleEditExpense() {
         Expense selectedExpense = null;
@@ -469,6 +508,89 @@ public class DashboardController implements Initializable {
         } catch (Exception e) {
             Logger.error("Error exporting expenses to CSV: " + e.getMessage());
             AlertUtils.showError("Error", "Failed to export expenses to CSV.");
+        }
+    }
+
+    @FXML
+    public void handleNewPayment() {
+        // Convert users in the group to ComboBoxOptions
+        List<ComboBoxOption> userOptions = usersInGroup.stream()
+                .map(user -> new ComboBoxOption(user.getId(), user.getName()))
+                .toList();
+
+        // Define fields for the dialog
+        List<FieldConfig> fields = Arrays.asList(
+                new FieldConfig<>("date", "Date", null, FieldType.DATE, true, null, null),
+                new FieldConfig<>("amount", "Value", "Enter the payment amount", FieldType.TEXT, true, null, null),
+                new FieldConfig<>("paidBy", "Paid By", "Select payer", FieldType.COMBOBOX, true, null, userOptions),
+                new FieldConfig<>("receivedBy", "Received By", "Select receiver", FieldType.COMBOBOX, true, null, userOptions)
+        );
+
+        Dialog<Map<String, Object>> dialog = CustomDialog.createDialog("Add New Payment", fields);
+
+        Optional<Map<String, Object>> result = dialog.showAndWait();
+        result.ifPresent(data -> {
+            try {
+                String date = (String) data.get("date");
+                double amount = Double.parseDouble(data.get("amount").toString());
+                ComboBoxOption paidBy = (ComboBoxOption) data.get("paidBy");
+                ComboBoxOption receivedBy = (ComboBoxOption) data.get("receivedBy");
+
+                if (paidBy == null || receivedBy == null) {
+                    AlertUtils.showError("Invalid Data", "Please select both payer and receiver.");
+                    return;
+                }
+
+                if (paidBy.getId() == receivedBy.getId()) {
+                    AlertUtils.showError("Invalid Data", "Payer and receiver cannot be the same user.");
+                    return;
+                }
+
+                Payment newPayment = new Payment(
+                        0, // ID will be set by the server
+                        selectedGroup.getId(),
+                        paidBy.getId(),
+                        receivedBy.getId(),
+                        amount,
+                        date
+                );
+
+                // Send the new payment to the server
+                new Thread(() -> {
+                    ServerResponse response = clientService.sendRequest(new Message(Message.Type.ADD_PAYMENT, newPayment));
+                    javafx.application.Platform.runLater(() -> {
+                        if (response.isSuccess()) {
+                            paymentsTableView.getItems().add(newPayment);
+                            AlertUtils.showSuccess("Success", "Payment added successfully!");
+                        } else {
+                            AlertUtils.showError("Error", "Failed to add payment: " + response.message());
+                        }
+                    });
+                }).start();
+            } catch (Exception e) {
+                AlertUtils.showError("Error", "Invalid data provided: " + e.getMessage());
+            }
+        });
+    }
+    @FXML
+    public void handleEditPayment() {
+        Payment selectedPayment = paymentsTableView.getSelectionModel().getSelectedItem();
+        if (selectedPayment != null) {
+            // Lógica para editar o pagamento
+            AlertUtils.showSuccess("Edit Payment", "Editing payment: " + selectedPayment);
+        } else {
+            AlertUtils.showError("Error", "No payment selected for editing.");
+        }
+    }
+
+    @FXML
+    public void handleDeletePayment() {
+        Payment selectedPayment = paymentsTableView.getSelectionModel().getSelectedItem();
+        if (selectedPayment != null) {
+            // Lógica para remover o pagamento
+            AlertUtils.showSuccess("Delete Payment", "Removing payment: " + selectedPayment);
+        } else {
+            AlertUtils.showError("Error", "No payment selected for deletion.");
         }
     }
 
