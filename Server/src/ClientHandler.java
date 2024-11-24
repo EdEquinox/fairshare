@@ -12,6 +12,7 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ClientHandler implements Runnable {
     private final Socket clientSocket;
@@ -23,11 +24,15 @@ public class ClientHandler implements Runnable {
     private final static int MULTICAST_PORT = 4444;
     private int version;
 
+
+
     public ClientHandler(Socket clientSocket, String databasePath) {
         this.clientSocket = clientSocket;
         this.databasePath = databasePath;
         this.version = 1;
     }
+
+
 
     @Override
     public void run() {
@@ -162,6 +167,7 @@ public class ClientHandler implements Runnable {
         } catch (IOException e) {
             Logger.error("Error handling client: " + e.getMessage());
         } finally {
+            // Close the client socket if open
             try {
                 if (clientSocket != null && !clientSocket.isClosed()) {
                     clientSocket.close();
@@ -170,8 +176,16 @@ public class ClientHandler implements Runnable {
             } catch (IOException e) {
                 Logger.error("Error closing client connection: " + e.getMessage());
             }
+
+            // Remove this client's writer from the server's list of connected writers
+            if (out != null) {
+                Server.removeClient(out);
+                Logger.info("Client writer removed from the server.");
+            }
         }
+
     }
+
 
     private void handleCreateInvite(Invite invite) {
         String getUserIdSql = "SELECT id FROM users WHERE email = ?";
@@ -206,6 +220,9 @@ public class ClientHandler implements Runnable {
                 if (rowsAffected > 0) {
                     Logger.info("Invite created successfully: " + invite);
                     sendResponse(new ServerResponse(true, "Invite created successfully.", null));
+
+                    // Broadcast update to all connected clients
+                    Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "Invite created", invite)));
                 } else {
                     Logger.error("Failed to create invite: " + invite);
                     sendResponse(new ServerResponse(false, "Failed to create invite.", null));
@@ -223,11 +240,12 @@ public class ClientHandler implements Runnable {
         String addUserToGroupSQL = "INSERT INTO users_groups (user_id, group_id) VALUES (?, ?)";
 
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
-            connection.setAutoCommit(false); // Inicia a transação
+            connection.setAutoCommit(false); // Start the transaction
 
-            try (PreparedStatement updateInviteStmt = connection.prepareStatement(updateInviteSQL); PreparedStatement addUserToGroupStmt = connection.prepareStatement(addUserToGroupSQL)) {
+            try (PreparedStatement updateInviteStmt = connection.prepareStatement(updateInviteSQL);
+                 PreparedStatement addUserToGroupStmt = connection.prepareStatement(addUserToGroupSQL)) {
 
-                // Atualiza o status do convite para "ACCEPTED"
+                // Update the status of the invite to "ACCEPTED"
                 updateInviteStmt.setString(1, Invite.Status.ACCEPTED.name());
                 updateInviteStmt.setInt(2, invite.getId());
                 updateInviteStmt.executeUpdate();
@@ -235,7 +253,7 @@ public class ClientHandler implements Runnable {
                 String newSQL = "UPDATE group_invites SET status = 'ACCEPTED' WHERE id = " + invite.getId();
                 sendHeartbeat(newSQL, getVersion());
 
-                // Adiciona o usuário ao grupo
+                // Add the user to the group
                 addUserToGroupStmt.setInt(1, invite.getReceiverId());
                 addUserToGroupStmt.setInt(2, invite.getGroupId());
                 addUserToGroupStmt.executeUpdate();
@@ -243,12 +261,17 @@ public class ClientHandler implements Runnable {
                 newSQL = "INSERT INTO users_groups (user_id, group_id) VALUES (" + invite.getReceiverId() + ", " + invite.getGroupId() + ")";
                 sendHeartbeat(newSQL, getVersion());
 
-                connection.commit(); // Confirma a transação
+                connection.commit(); // Commit the transaction
+
+                // Send response to the current client
                 sendResponse(new ServerResponse(true, "Invite accepted successfully.", null));
                 Logger.info("Invite accepted and user added to group: " + invite);
 
+                // Broadcast update to all connected clients
+                Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "Invite accepted", invite)));
+
             } catch (SQLException e) {
-                connection.rollback(); // Reverte a transação em caso de erro
+                connection.rollback(); // Roll back the transaction in case of error
                 Logger.error("Error while accepting invite: " + e.getMessage());
                 sendResponse(new ServerResponse(false, "Error while accepting invite: " + e.getMessage(), null));
             }
@@ -259,12 +282,14 @@ public class ClientHandler implements Runnable {
         }
     }
 
+
     private void handleDeclineInvite(Invite invite) {
         String updateInviteSQL = "UPDATE group_invites SET status = ? WHERE id = ?";
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(updateInviteSQL)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement statement = connection.prepareStatement(updateInviteSQL)) {
 
-            // Atualiza o status do convite para "DENIED"
+            // Update the status of the invite to "DENIED"
             statement.setString(1, Invite.Status.DENIED.name());
             statement.setInt(2, invite.getId());
             int rowsAffected = statement.executeUpdate();
@@ -273,8 +298,12 @@ public class ClientHandler implements Runnable {
             sendHeartbeat(newSQL, getVersion());
 
             if (rowsAffected > 0) {
+                // Send response to the client
                 sendResponse(new ServerResponse(true, "Invite declined successfully.", null));
                 Logger.info("Invite declined: " + invite);
+
+                // Broadcast update to all connected clients
+                Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "Invite declined", invite)));
             } else {
                 sendResponse(new ServerResponse(false, "No invite found with the given ID.", null));
                 Logger.error("Failed to decline invite - no invite found with ID: " + invite.getId());
@@ -285,6 +314,7 @@ public class ClientHandler implements Runnable {
             sendResponse(new ServerResponse(false, "Error while declining invite: " + e.getMessage(), null));
         }
     }
+
 
     private void handleGetInvites(User user) {
         String sql = "SELECT gi.id, gi.group_id, gi.invited_by, gi.invited_user, gi.status, " + "g.name AS group_name, ub.email AS sender_email, ur.email AS receiver_email " + "FROM group_invites gi " + "INNER JOIN groups g ON gi.group_id = g.id " + "INNER JOIN users ub ON gi.invited_by = ub.id " + "INNER JOIN users ur ON gi.invited_user = ur.id " + "WHERE gi.invited_user = ? AND gi.status = 'PENDING'";
@@ -318,9 +348,9 @@ public class ClientHandler implements Runnable {
         }
 
         String insertSql = """
-            INSERT INTO expenses (group_id, added_by, paid_by, amount, description, date, shared_with)
-            VALUES (?, ?, ?, ?, ?, ?, ?);
-            """;
+        INSERT INTO expenses (group_id, added_by, paid_by, amount, description, date, shared_with)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
+        """;
 
         String fetchPaidByNameSql = "SELECT name FROM users WHERE id = ?;";
 
@@ -345,7 +375,10 @@ public class ClientHandler implements Runnable {
 
             int rowsAffected = insertStatement.executeUpdate();
             updateVersion();
-            String newSQL = "INSERT INTO expenses (group_id, added_by, paid_by, amount, description, date, shared_with) VALUES (" + expense.getGroupId() + ", " + expense.getAddedBy() + ", " + expense.getPaidBy() + ", " + expense.getAmount() + ", '" + expense.getDescription() + "', '" + expense.getDate() + "', '" + convertListToJson(expense.getSharedWith()) + "')";
+            String newSQL = "INSERT INTO expenses (group_id, added_by, paid_by, amount, description, date, shared_with) VALUES ("
+                    + expense.getGroupId() + ", " + expense.getAddedBy() + ", " + expense.getPaidBy() + ", "
+                    + expense.getAmount() + ", '" + expense.getDescription() + "', '" + expense.getDate()
+                    + "', '" + convertListToJson(expense.getSharedWith()) + "')";
             sendHeartbeat(newSQL, getVersion());
 
             if (rowsAffected > 0) {
@@ -363,6 +396,9 @@ public class ClientHandler implements Runnable {
 
                 Logger.info("Expense added successfully: " + expense);
                 sendResponse(new ServerResponse(true, "Expense added successfully.", expense));
+
+                // Broadcast update to all clients
+                Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "New expense added", expense)));
             } else {
                 Logger.error("Failed to add expense: " + expense);
                 sendResponse(new ServerResponse(false, "Failed to add expense.", null));
@@ -373,6 +409,7 @@ public class ClientHandler implements Runnable {
             sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
         }
     }
+
 
     private void handleGetExpenses(Integer groupId) {
         if (groupId == null) {
@@ -481,14 +518,14 @@ public class ClientHandler implements Runnable {
         }
 
         String sql = """
-            UPDATE expenses
-            SET paid_by = ?, 
-                amount = ?, 
-                description = ?, 
-                date = ?, 
-                shared_with = ?
-            WHERE id = ?;
-            """;
+        UPDATE expenses
+        SET paid_by = ?, 
+            amount = ?, 
+            description = ?, 
+            date = ?, 
+            shared_with = ?
+        WHERE id = ?;
+        """;
 
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -502,12 +539,18 @@ public class ClientHandler implements Runnable {
 
             int rowsAffected = statement.executeUpdate();
             updateVersion();
-            String newSQL = "UPDATE expenses SET paid_by = " + expense.getPaidBy() + ", amount = " + expense.getAmount() + ", description = '" + expense.getDescription() + "', date = '" + expense.getDate() + "', shared_with = '" + convertListToJson(expense.getSharedWith()) + "' WHERE id = " + expense.getId();
+            String newSQL = "UPDATE expenses SET paid_by = " + expense.getPaidBy() + ", amount = " + expense.getAmount()
+                    + ", description = '" + expense.getDescription() + "', date = '" + expense.getDate()
+                    + "', shared_with = '" + convertListToJson(expense.getSharedWith())
+                    + "' WHERE id = " + expense.getId();
             sendHeartbeat(newSQL, getVersion());
 
             if (rowsAffected > 0) {
                 Logger.info("Expense updated successfully: " + expense);
-                sendResponse(new ServerResponse(true, "Expense updated successfully.", null));
+                sendResponse(new ServerResponse(true, "Expense updated successfully.", expense));
+
+                // Broadcast update to all clients
+                Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "Expense updated", expense)));
             } else {
                 Logger.error("Failed to update expense: " + expense);
                 sendResponse(new ServerResponse(false, "Failed to update expense.", null));
@@ -519,23 +562,34 @@ public class ClientHandler implements Runnable {
         }
     }
 
+
     private void handleDeleteExpense(int expenseId) {
         String query = "DELETE FROM expenses WHERE id = ?";
 
         boolean isSuccess = false;
         String message;
 
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement stmt = conn.prepareStatement(query)) {
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
 
             stmt.setInt(1, expenseId);
-            stmt.executeUpdate();
-            updateVersion();
-            String newSQL = "DELETE FROM expenses WHERE id = " + expenseId;
-            sendHeartbeat(newSQL, getVersion());
+            int rowsAffected = stmt.executeUpdate();
 
-            isSuccess = true;
-            message = "Expense deleted successfully.";
-            Logger.info("Expense deleted from the database. ID: " + expenseId);
+            if (rowsAffected > 0) {
+                updateVersion();
+                String newSQL = "DELETE FROM expenses WHERE id = " + expenseId;
+                sendHeartbeat(newSQL, getVersion());
+
+                isSuccess = true;
+                message = "Expense deleted successfully.";
+                Logger.info("Expense deleted from the database. ID: " + expenseId);
+
+                // Broadcast update to all clients
+                Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "Expense deleted", expenseId)));
+            } else {
+                message = "Expense not found or already deleted.";
+                Logger.error("Failed to delete expense: ID not found - " + expenseId);
+            }
 
         } catch (SQLException e) {
             message = "Failed to delete expense.";
@@ -544,6 +598,7 @@ public class ClientHandler implements Runnable {
 
         sendResponse(new ServerResponse(isSuccess, message, null));
     }
+
 
     private void handleAddPayment(Payment payment) {
         if (payment == null) {
@@ -560,7 +615,7 @@ public class ClientHandler implements Runnable {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
              PreparedStatement insertStatement = connection.prepareStatement(insertSql)) {
 
-            // Adicionar o novo pagamento à base de dados
+            // Add the new payment to the database
             insertStatement.setInt(1, payment.getGroupId());
             insertStatement.setInt(2, payment.getPaidBy());
             insertStatement.setInt(3, payment.getReceivedBy());
@@ -574,6 +629,7 @@ public class ClientHandler implements Runnable {
                 return;
             }
 
+            // Fetch the names of users involved
             String paidByName = fetchSharedWithNames(Collections.singletonList(payment.getPaidBy()), connection);
             String receivedByName = fetchSharedWithNames(Collections.singletonList(payment.getReceivedBy()), connection);
 
@@ -586,13 +642,25 @@ public class ClientHandler implements Runnable {
             payment.setPaidByName(paidByName);
             payment.setReceivedByName(receivedByName);
 
+            // Update the version and broadcast the new payment
+            updateVersion();
+            String newSQL = """
+            INSERT INTO payments (group_id, from_user_id, to_user_id, amount, date) 
+            VALUES (%d, %d, %d, %.2f, '%s')
+        """.formatted(payment.getGroupId(), payment.getPaidBy(), payment.getReceivedBy(), payment.getAmount(), payment.getDate());
+            sendHeartbeat(newSQL, getVersion());
+
             Logger.info("Payment added successfully: " + payment);
             sendResponse(new ServerResponse(true, "Payment added successfully.", payment));
+
+            // Broadcast the update
+            Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "New payment added", payment)));
         } catch (SQLException e) {
             Logger.error("Database error while adding payment: " + e.getMessage());
             sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
         }
     }
+
 
     private void handleEditPayment(Payment payment) {
         if (payment == null) {
@@ -610,7 +678,7 @@ public class ClientHandler implements Runnable {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
              PreparedStatement statement = connection.prepareStatement(sql)) {
 
-            // Atualizar os dados do pagamento
+            // Update payment data in the database
             statement.setString(1, payment.getDate());
             statement.setDouble(2, payment.getAmount());
             statement.setInt(3, payment.getPaidBy());
@@ -621,7 +689,20 @@ public class ClientHandler implements Runnable {
 
             if (rowsUpdated > 0) {
                 Logger.info("Payment updated successfully: " + payment);
-                sendResponse(new ServerResponse(true, "Payment updated successfully.", null));
+
+                // Update the version and send a heartbeat
+                updateVersion();
+                String newSQL = """
+                UPDATE payments SET date = '%s', amount = %.2f, from_user_id = %d, to_user_id = %d 
+                WHERE id = %d
+            """.formatted(payment.getDate(), payment.getAmount(), payment.getPaidBy(), payment.getReceivedBy(), payment.getId());
+                sendHeartbeat(newSQL, getVersion());
+
+                // Respond to the client
+                sendResponse(new ServerResponse(true, "Payment updated successfully.", payment));
+
+                // Broadcast the update to all clients
+                Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "Payment updated", payment)));
             } else {
                 Logger.error("Failed to update payment: " + payment);
                 sendResponse(new ServerResponse(false, "Failed to update payment.", null));
@@ -634,6 +715,7 @@ public class ClientHandler implements Runnable {
             sendResponse(new ServerResponse(false, "Error processing request: " + e.getMessage(), null));
         }
     }
+
 
     private void handleDeletePayment(int paymentId) {
         if (paymentId <= 0) {
@@ -652,8 +734,17 @@ public class ClientHandler implements Runnable {
             int rowsAffected = statement.executeUpdate();
             if (rowsAffected > 0) {
                 Logger.info("Payment deleted successfully: ID " + paymentId);
+
+                // Update version and send heartbeat
+                updateVersion();
+                String newSQL = "DELETE FROM payments WHERE id = " + paymentId;
+                sendHeartbeat(newSQL, getVersion());
+
+                // Respond to the client
                 sendResponse(new ServerResponse(true, "Payment deleted successfully.", null));
 
+                // Broadcast update to all clients
+                Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "Payment deleted", paymentId)));
             } else {
                 Logger.error("Failed to delete payment: ID " + paymentId);
                 sendResponse(new ServerResponse(false, "Payment not found or already deleted.", null));
@@ -664,6 +755,7 @@ public class ClientHandler implements Runnable {
             sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
         }
     }
+
 
     private void handleGetPayments(Integer groupId) {
         if (groupId == null) {
@@ -942,18 +1034,26 @@ public class ClientHandler implements Runnable {
     private void handleEditGroup(Group group) {
         String sql = "UPDATE groups SET name = ? WHERE id = ?";
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement statement = connection.prepareStatement(sql)) {
 
             statement.setString(1, group.getName());
             statement.setInt(2, group.getId());
 
             int rowsAffected = statement.executeUpdate();
             updateVersion();
-            String newSQL = "UPDATE groups SET name = '" + group.getName() + "' WHERE id = " + group.getId();
-            sendHeartbeat(newSQL, getVersion());
 
+            // Broadcast update if the group name was successfully changed
             if (rowsAffected > 0) {
                 Logger.info("Group name updated successfully: " + group);
+
+                // Broadcast the update to all clients
+                Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "Group name updated successfully", group)));
+
+                // Send heartbeat for replication
+                String newSQL = "UPDATE groups SET name = '" + group.getName() + "' WHERE id = " + group.getId();
+                sendHeartbeat(newSQL, getVersion());
+
                 sendResponse(new ServerResponse(true, "Group name updated successfully.", null));
             } else {
                 Logger.error("Failed to update group name: Group not found. ID: " + group.getId());
@@ -966,16 +1066,17 @@ public class ClientHandler implements Runnable {
         }
     }
 
+
     private void handleRemoveGroup(Group group) {
         String checkDebtsSql = """
-                    SELECT COUNT(*) AS debtCount 
-                    FROM payments 
-                    WHERE group_id = ? AND (amount > 0)
-                """;
+                SELECT COUNT(*) AS debtCount 
+                FROM payments 
+                WHERE group_id = ? AND (amount > 0)
+            """;
         String deleteGroupSql = "DELETE FROM groups WHERE id = ?";
 
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
-            // Verifica se existem dívidas ou valores pendentes
+            // Check for outstanding debts
             try (PreparedStatement checkStatement = connection.prepareStatement(checkDebtsSql)) {
                 checkStatement.setInt(1, group.getId());
                 ResultSet resultSet = checkStatement.executeQuery();
@@ -987,17 +1088,23 @@ public class ClientHandler implements Runnable {
                 }
             }
 
-            // Remove o grupo
+            // Remove the group
             try (PreparedStatement deleteStatement = connection.prepareStatement(deleteGroupSql)) {
                 deleteStatement.setInt(1, group.getId());
 
                 int rowsAffected = deleteStatement.executeUpdate();
                 updateVersion();
-                String newSQL = "DELETE FROM groups WHERE id = " + group.getId();
-                sendHeartbeat(newSQL, getVersion());
 
                 if (rowsAffected > 0) {
                     Logger.info("Group removed successfully: " + group);
+
+                    // Send heartbeat for replication
+                    String newSQL = "DELETE FROM groups WHERE id = " + group.getId();
+                    sendHeartbeat(newSQL, getVersion());
+
+                    // Broadcast the removal to all clients
+                    Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "Group removed", group)));
+
                     sendResponse(new ServerResponse(true, "Group removed successfully.", null));
                 } else {
                     Logger.error("Failed to remove group: Group not found. ID: " + group.getId());
@@ -1009,6 +1116,7 @@ public class ClientHandler implements Runnable {
             sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
         }
     }
+
 
     private String getGroupNamefromDB(int groupId) {
         String query = "SELECT name FROM groups WHERE id = ?";
@@ -1056,12 +1164,17 @@ public class ClientHandler implements Runnable {
 
             int rowsAffected = stmt.executeUpdate();
             updateVersion();
-            updateSQL = "UPDATE users WHERE id = " + user.getId();
+            updateSQL = "UPDATE users SET name = '" + user.getName() + "', email = '" + user.getEmail() +
+                    "', phone = '" + user.getPhone() + "', password = '" + user.getPassword() + "' WHERE id = " + user.getId();
             sendHeartbeat(updateSQL, getVersion());
+
             if (rowsAffected > 0) {
                 isSuccess = true;
                 message = "User profile updated successfully";
                 Logger.info("User profile updated successfully for email: " + user.getEmail());
+
+                // Broadcast the profile update to all clients
+                Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "User profile updated", user)));
             } else {
                 message = "User not found!";
                 Logger.error("No user found with ID: " + user.getId());
@@ -1073,6 +1186,7 @@ public class ClientHandler implements Runnable {
 
         sendResponse(new ServerResponse(isSuccess, message, null));
     }
+
 
     private void handleGetProfile(User user) throws IOException {
         String url = "jdbc:sqlite:" + databasePath;
@@ -1124,18 +1238,28 @@ public class ClientHandler implements Runnable {
             }
 
             // Insert if email doesn't exist
-            try (PreparedStatement insertStmt = conn.prepareStatement(insertSQL)) {
+            try (PreparedStatement insertStmt = conn.prepareStatement(insertSQL, Statement.RETURN_GENERATED_KEYS)) {
                 insertStmt.setString(1, user.getName());
                 insertStmt.setString(2, user.getEmail());
                 insertStmt.setString(3, user.getPhone());
                 insertStmt.setString(4, user.getPassword());
                 insertStmt.executeUpdate();
+
+                // Get the generated user ID
+                ResultSet generatedKeys = insertStmt.getGeneratedKeys();
+                if (generatedKeys.next()) {
+                    int newUserId = generatedKeys.getInt(1);
+                    user.setId(newUserId);  // Update the user object with the new ID
+                }
+
                 updateVersion();
-                insertSQL = "INSERT INTO users (name, email, phone, password) VALUES ('" + user.getName() + "', '" + user.getEmail() + "', '" + user.getPhone() + "', '" + user.getPassword() + "')";
                 sendHeartbeat(insertSQL, getVersion());
                 isSuccess = true;
                 message = "User registered successfully";
                 Logger.info("User added successfully to the database: " + user.getName());
+
+                // Broadcast the registration to all clients with the full user details
+                Server.broadcastUpdate(gson.toJson(new ServerResponse(true, "New user registered", user)));
             }
 
         } catch (SQLException e) {
@@ -1143,10 +1267,11 @@ public class ClientHandler implements Runnable {
             Logger.error("Database error: " + e.getMessage());
         }
 
-        ServerResponse response = new ServerResponse(isSuccess, message, null);
+        ServerResponse response = new ServerResponse(isSuccess, message, user); // Send the full user details in the payload
         sendResponse(response);
-
     }
+
+
 
     private void handleLogin(User user) throws IOException {
 
