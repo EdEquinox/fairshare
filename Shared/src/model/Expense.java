@@ -1,16 +1,19 @@
 package model;
 
+import java.util.List;
+
 public class Expense {
     private int id;
     private int groupId;
-    private int paidBy;
+    private int paidBy; // ID of the user who paid
+    private int addedBy; // ID of the user who added the expense
     private double amount;
     private String description;
     private String date;
-    private int addedBy;
+    private List<Integer> sharedWith; // IDs of users with whom the expense is shared
 
-    // Full constructor including addedBy
-    public Expense(int id, int groupId, int paidBy, int addedBy, double amount, String description, String date) {
+    // Full constructor including sharedWith
+    public Expense(int id, int groupId, int paidBy, int addedBy, double amount, String description, String date, List<Integer> sharedWith) {
         this.id = id;
         this.groupId = groupId;
         this.paidBy = paidBy;
@@ -18,6 +21,7 @@ public class Expense {
         this.amount = amount;
         this.description = description;
         this.date = date;
+        this.sharedWith = sharedWith;
     }
 
     // Getters and setters
@@ -45,6 +49,14 @@ public class Expense {
         this.paidBy = paidBy;
     }
 
+    public int getAddedBy() {
+        return addedBy;
+    }
+
+    public void setAddedBy(int addedBy) {
+        this.addedBy = addedBy;
+    }
+
     public double getAmount() {
         return amount;
     }
@@ -69,12 +81,12 @@ public class Expense {
         this.date = date;
     }
 
-    public int getAddedBy() {
-        return addedBy;
+    public List<Integer> getSharedWith() {
+        return sharedWith;
     }
 
-    public void setAddedBy(int addedBy) {
-        this.addedBy = addedBy;
+    public void setSharedWith(List<Integer> sharedWith) {
+        this.sharedWith = sharedWith;
     }
 
     // toString for debugging and logging purposes
@@ -88,6 +100,7 @@ public class Expense {
                 ", amount=" + amount +
                 ", description='" + description + '\'' +
                 ", date='" + date + '\'' +
+                ", sharedWith=" + sharedWith +
                 '}';
     }
 }

@@ -4,8 +4,7 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.text.Text?>
-<StackPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.HomeController" prefWidth="800"
-           prefHeight="600">
+<StackPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.HomeController">
     <!-- VBox to organize elements vertically -->
     <VBox alignment="CENTER" spacing="20" prefWidth="800" prefHeight="600" style="-fx-padding: 20 0 0 0">
         <!-- Title, centered at the top -->

@@ -16,20 +16,18 @@
                       style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #FFFFFF;"/>
                 <Button text="Edit Profile" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
                         onAction="#handleEditProfile"/>
-                <Button text="Logout" style="-fx-background-color: #FF5722; -fx-text-fill: #FFFFFF;"
+                <Button text="Group Invites" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
+                        onAction="#handleGroupInvites"/>
+                <Button text="Logout" style="-fx-background-color: red; -fx-text-fill: #FFFFFF;"
                         onAction="#handleLogout"/>
                 <Separator style="-fx-background-color: #555555;"/>
 
                 <Text text="Group Section" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #FFFFFF;"/>
                 <Button text="Add New Group" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
-                        onAction="#handleAddNewGroup"/>
+                        onAction="#handleNewGroup"/>
                 <ListView fx:id="groupList" VBox.vgrow="ALWAYS"
                           onMouseClicked="#handleGroupSelection"
                           style="-fx-background-color: #333333; -fx-text-fill: #FFFFFF; -fx-border-color: #444444;" />
-                <Separator style="-fx-background-color: #555555;"/>
-
-                <Button text="Group Invites" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
-                        onAction="#handleGroupInvites"/>
             </VBox>
         </ScrollPane>
     </left>
@@ -38,53 +36,78 @@
     <center>
         <VBox spacing="10" style="-fx-padding: 15;" VBox.vgrow="ALWAYS">
 
-            <!-- Top Section: Users in Selected Group -->
-            <VBox spacing="5" alignment="TOP_CENTER" VBox.vgrow="NEVER">
-                <Label text="Users in Selected Group"
-                       style="-fx-font-size: 16; -fx-font-weight: bold;"
-                       alignment="CENTER"/>
-                <ListView fx:id="userListView"
-                          style="-fx-background-color: #ffffff;"
-                          VBox.vgrow="ALWAYS"/>
-            </VBox>
+            <!-- Small Users List and Group Summary -->
+            <HBox spacing="10" VBox.vgrow="NEVER" alignment="CENTER">
+                <VBox spacing="5" prefWidth="150" alignment="CENTER">
+                    <Label text="Users in Group"
+                           style="-fx-font-size: 16; -fx-font-weight: bold;"
+                           textAlignment="CENTER"/>
+                    <ListView fx:id="userListView"
+                              style="-fx-background-color: #ffffff;"
+                              prefHeight="100" VBox.vgrow="NEVER"/>
+                </VBox>
 
-            <!-- Bottom Section: Expenses for Selected User -->
-            <VBox spacing="5" alignment="TOP_CENTER" VBox.vgrow="ALWAYS">
-                <Label text="Expenses"
-                       style="-fx-font-size: 16; -fx-font-weight: bold;"
-                       alignment="CENTER"/>
-                <TableView fx:id="expensesTable"
-                           style="-fx-background-color: #ffffff;"
-                           VBox.vgrow="ALWAYS">
-                    <columns>
-                        <TableColumn text="Date" fx:id="dateColumn" prefWidth="150"/>
-                        <TableColumn text="Description" fx:id="descriptionColumn" prefWidth="250"/>
-                        <TableColumn text="Amount" fx:id="amountColumn" prefWidth="100"/>
-                        <TableColumn text="Paid By (User ID)" fx:id="paidByColumn" prefWidth="100"/>
-                    </columns>
-                </TableView>
+                <VBox spacing="5" HBox.hgrow="ALWAYS" alignment="CENTER">
+                    <Label text="Group Summary"
+                           style="-fx-font-size: 16; -fx-font-weight: bold;"
+                           textAlignment="CENTER"/>
+                    <Label fx:id="totalSpentLabel" text="Total Spent: $0"
+                           style="-fx-font-size: 14;"
+                           textAlignment="CENTER"/>
+                </VBox>
 
-                <!-- Total Expenses and Buttons -->
-                <HBox spacing="10" alignment="CENTER">
-                    <Label fx:id="totalExpensesLabel"
-                           text="Total Expenses: $"
-                           style="-fx-font-size: 16; -fx-font-weight: bold;"/>
-                </HBox>
-                <HBox spacing="10" alignment="CENTER">
-                    <Button text="Add"
-                            onAction="#handleAddExpense"
-                            style="-fx-font-size: 14; -fx-padding: 5 10;"/>
-                    <Button text="Edit"
-                            onAction="#handleEditExpense"
-                            style="-fx-font-size: 14; -fx-padding: 5 10;"/>
-                    <Button text="Delete"
-                            onAction="#handleDeleteExpense"
-                            style="-fx-font-size: 14; -fx-padding: 5 10;"/>
-                    <Button text="Export to CSV"
-                            onAction="#handleExportToCSV"
-                            style="-fx-font-size: 14; -fx-padding: 5 10;"/>
-                </HBox>
-            </VBox>
+                <VBox spacing="5" HBox.hgrow="ALWAYS" alignment="CENTER">
+                    <Label fx:id="amountToPayLabel" text="Total to Pay: $0"
+                           style="-fx-font-size: 14;"
+                           textAlignment="CENTER"/>
+                    <ListView fx:id="payListView"
+                              style="-fx-background-color: #ffffff;"
+                              prefHeight="100"/>
+                </VBox>
+
+                <VBox spacing="5" HBox.hgrow="ALWAYS" alignment="CENTER">
+                    <Label fx:id="amountToReceiveLabel" text="Total to Receive: $0"
+                           style="-fx-font-size: 14;"
+                           textAlignment="CENTER"/>
+                    <ListView fx:id="receiveListView"
+                              style="-fx-background-color: #ffffff;"
+                              prefHeight="100"/>
+                </VBox>
+            </HBox>
+
+            <!-- Expenses and Payments Lists -->
+            <HBox spacing="10" VBox.vgrow="ALWAYS" alignment="CENTER">
+                <!-- Expenses Section -->
+                <VBox spacing="5" alignment="CENTER" VBox.vgrow="ALWAYS" HBox.hgrow="ALWAYS">
+                    <Label text="Expenses"
+                           style="-fx-font-size: 16; -fx-font-weight: bold;"
+                           textAlignment="CENTER"/>
+                    <TableView fx:id="expensesTableView" VBox.vgrow="ALWAYS">
+                        <columns>
+                            <TableColumn text="Date" fx:id="expensesDateColumn" prefWidth="80"/>
+                            <TableColumn text="Description" fx:id="expensesDescriptionColumn" prefWidth="150"/>
+                            <TableColumn text="Value" fx:id="expensesValueColumn" prefWidth="70"/>
+                            <TableColumn text="Paid By" fx:id="expensesPaidByColumn" prefWidth="100"/>
+                            <TableColumn text="Shared With" fx:id="expensesSharedWithColumn" prefWidth="120"/>
+                        </columns>
+                    </TableView>
+                </VBox>
+
+                <!-- Payments Section -->
+                <VBox spacing="5" alignment="CENTER" VBox.vgrow="ALWAYS" HBox.hgrow="ALWAYS">
+                    <Label text="Payments"
+                           style="-fx-font-size: 16; -fx-font-weight: bold;"
+                           textAlignment="CENTER"/>
+                    <TableView fx:id="paymentsTableView" VBox.vgrow="ALWAYS">
+                        <columns>
+                            <TableColumn text="Paid By" fx:id="paymentsPaidByColumn" prefWidth="100"/>
+                            <TableColumn text="Received By" fx:id="paymentsReceivedByColumn" prefWidth="100"/>
+                            <TableColumn text="Date" fx:id="paymentsDateColumn" prefWidth="80"/>
+                            <TableColumn text="Value" fx:id="paymentsValueColumn" prefWidth="70"/>
+                        </columns>
+                    </TableView>
+                </VBox>
+            </HBox>
         </VBox>
     </center>
 

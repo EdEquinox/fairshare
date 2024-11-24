@@ -96,10 +96,6 @@ public class ClientHandler implements Runnable {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
                             handleGetUsersForGroup(group);
                         }
-                        case Message.Type.GET_EXPENSES -> {
-                            Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
-                            handleGetExpenses(group);
-                        }
                         case Message.Type.BACKUP_INIT -> {
                             sendDatabaseFile(clientSocket);
                         }
@@ -119,10 +115,6 @@ public class ClientHandler implements Runnable {
                             int groupId = gson.fromJson(gson.toJson(message.payload()), Integer.class);
                             String groupName = getGroupNamefromDB(groupId);
                             sendResponse(new ServerResponse(true, "Group name retrieved successfully", groupName));
-                        }
-                        case Message.Type.GET_EXPENSES_USER -> {
-                            int userId = gson.fromJson(gson.toJson(message.payload()), Integer.class); // Deserialize as int
-                            handleGetExpensesUser(userId);
                         }
                         case Message.Type.ADD_EXPENSE -> {
                             Expense expense = gson.fromJson(gson.toJson(message.payload()), Expense.class);
@@ -251,52 +243,6 @@ public class ClientHandler implements Runnable {
         sendResponse(new ServerResponse(isSuccess, message, null));
     }
 
-
-    private void handleGetExpensesUser(int userId) {
-        String query = "SELECT id, group_id, paid_by, added_by, amount, description, date " +
-                "FROM expenses WHERE paid_by = ? ORDER BY date ASC";
-
-        boolean isSuccess = false;
-        String message;
-        List<Expense> expenses = new ArrayList<>();
-
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement stmt = conn.prepareStatement(query)) {
-
-            stmt.setInt(1, userId);
-            ResultSet rs = stmt.executeQuery();
-
-            while (rs.next()) {
-                int id = rs.getInt("id");
-                int groupId = rs.getInt("group_id");
-                int paidBy = rs.getInt("paid_by");
-                int addedBy = rs.getInt("added_by"); // Align with constructor
-                double amount = rs.getDouble("amount");
-                String description = rs.getString("description") != null ? rs.getString("description") : "";
-                String date = rs.getString("date") != null ? rs.getString("date") : "";
-
-                // Correct constructor usage
-                expenses.add(new Expense(id, groupId, paidBy, addedBy, amount, description, date));
-            }
-
-            if (!expenses.isEmpty()) {
-                isSuccess = true;
-                message = "Expenses retrieved successfully.";
-                Logger.info("Expenses retrieved for user ID: " + userId);
-            } else {
-                isSuccess = true; // No expenses is not an error
-                message = "No expenses found for the user.";
-                Logger.info("No expenses found for user ID: " + userId);
-            }
-
-        } catch (SQLException e) {
-            isSuccess = false;
-            message = "Error while retrieving expenses.";
-            Logger.error("Database error while fetching expenses for user ID: " + userId + ". Error: " + e.getMessage());
-        }
-
-        sendResponse(new ServerResponse(isSuccess, message, expenses));
-    }
 
     private void acceptInvite(Invite invite, User user) {
         String url = "jdbc:sqlite:" + databasePath;
@@ -464,52 +410,6 @@ public class ClientHandler implements Runnable {
             Logger.error("Error sending heartbeat: " + e.getMessage());
         }
 
-    }
-
-    private void handleGetExpenses(Group group) {
-        String query = "SELECT id, group_id, paid_by, added_by, amount, description, date " +
-                "FROM expenses WHERE group_id = ? ORDER BY date ASC";
-
-        boolean isSuccess = false;
-        String message;
-        List<Expense> expenses = new ArrayList<>();
-
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement stmt = conn.prepareStatement(query)) {
-
-            stmt.setInt(1, group.getId());
-            ResultSet rs = stmt.executeQuery();
-
-            while (rs.next()) {
-                int id = rs.getInt("id");
-                int groupId = rs.getInt("group_id");
-                int paidBy = rs.getInt("paid_by");
-                int addedBy = rs.getInt("added_by"); // Align with constructor
-                double amount = rs.getDouble("amount");
-                String description = rs.getString("description") != null ? rs.getString("description") : "";
-                String date = rs.getString("date") != null ? rs.getString("date") : "";
-
-                // Correct constructor usage
-                expenses.add(new Expense(id, groupId, paidBy, addedBy, amount, description, date));
-            }
-
-            if (!expenses.isEmpty()) {
-                isSuccess = true;
-                message = "Expenses retrieved successfully.";
-                Logger.info("Expenses retrieved for group: " + group.name());
-            } else {
-                isSuccess = true; // No expenses is not an error
-                message = "No expenses found for the group.";
-                Logger.info("No expenses found for group: " + group.name());
-            }
-
-        } catch (SQLException e) {
-            isSuccess = false;
-            message = "Error while retrieving expenses.";
-            Logger.error("Database error while fetching expenses: " + e.getMessage());
-        }
-
-        sendResponse(new ServerResponse(isSuccess, message, expenses));
     }
 
     private void handleGetUsersForGroup(Group group) {

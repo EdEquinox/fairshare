@@ -116,9 +116,7 @@ public class LoginController implements Initializable {
 
                         // Save user information and navigate to the dashboard
                         clientService.setCurrentUser(user);
-                        SharedState.setCurrentUser(user);
                         Logger.info("Login successful for user: " + user.getEmail());
-                        NavigationManager.switchScene(Routes.DASHBOARD);
                     } catch (JsonSyntaxException e) {
                         Logger.error("Error parsing JSON payload: " + e.getMessage());
                         AlertUtils.showError("Login Error", "Failed to parse server response. Please contact support.");
@@ -126,6 +124,9 @@ public class LoginController implements Initializable {
                         Logger.error("Unexpected error: " + e.getMessage());
                         AlertUtils.showError("Login Error", "An unexpected error occurred. Please try again.");
                     }
+                    // TODO: Meter no Try Catch
+                    NavigationManager.switchScene(Routes.DASHBOARD);
+
                 } else {
                     Logger.error("Login failed: " + response.message());
                     AlertUtils.showError("Login Failed", response.message());
