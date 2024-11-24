@@ -15,5 +15,6 @@
     <orderEntry type="library" name="sun.mail.javax" level="project" />
     <orderEntry type="module" module-name="Server" exported="" />
     <orderEntry type="module" module-name="Shared" />
+    <orderEntry type="library" name="lib1" level="project" />
   </component>
 </module>

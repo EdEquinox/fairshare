@@ -77,7 +77,56 @@ public class DashboardController implements Initializable {
         configureExpensesTableView();
         configurePaymentsTableView();
         fetchGroups();
+
+        // Register this controller as a broadcast listener
+        clientService.addBroadcastListener(this::handleBroadcast);
     }
+
+
+    /**
+     * Handles broadcasts received from the server.
+     *
+     * @param response The broadcast message received.
+     */
+    private void handleBroadcast(ServerResponse response) {
+        if (response == null || !response.isSuccess()) {
+            Logger.error("Invalid or unsuccessful broadcast: " + (response != null ? response.message() : "null"));
+            return;
+        }
+
+        javafx.application.Platform.runLater(() -> {
+            Logger.info("Processing broadcast message: " + response.message());
+
+            // Handle different broadcast messages based on their context
+            switch (response.message()) {
+                case "Group updated":
+                case "Group removed":
+                case "New group created":
+                    fetchGroups();
+                    break;
+
+                case "Expense updated":
+                case "Expense removed":
+                case "New expense added":
+                    if (selectedGroup != null) {
+                        fetchExpensesForGroup();
+                    }
+                    break;
+
+                case "Payment updated":
+                case "Payment removed":
+                case "New payment added":
+                    if (selectedGroup != null) {
+                        fetchPayments();
+                    }
+                    break;
+
+                default:
+                    Logger.info("Unhandled broadcast type: " + response.message());
+            }
+        });
+    }
+
 
     private void toggleMainContent(boolean visible) {
         mainContent.setVisible(visible);
@@ -135,20 +184,20 @@ public class DashboardController implements Initializable {
     private void configureGroupList() {
         groupList.setItems(groups);
 
-        // Listener para seleção de grupo
+        // Listener for group selection
         groupList.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
             handleGroupSelection(newValue);
             groupText.setText(selectedGroup.getName());
         });
 
-        // Clique do botão direito para exibir ContextMenu
+        // Right-click to show ContextMenu
         groupList.setOnMousePressed(event -> {
-            if (event.isSecondaryButtonDown()) { // Clique direito
+            if (event.isSecondaryButtonDown()) {
                 Group selectedGroup = groupList.getSelectionModel().getSelectedItem();
                 if (selectedGroup != null) {
                     groupContextMenu.show(groupList, event.getScreenX(), event.getScreenY());
                 }
-            } else if (event.isPrimaryButtonDown()) { // Clique esquerdo
+            } else if (event.isPrimaryButtonDown()) {
                 groupContextMenu.hide();
             }
         });
@@ -158,7 +207,7 @@ public class DashboardController implements Initializable {
         // Set items to the observable list of expenses
         expensesTableView.setItems(expenses);
 
-        // Configurar colunas
+        // Configure columns
         TableColumn<Expense, String> dateColumn = (TableColumn<Expense, String>) expensesTableView.getColumns().get(0);
         dateColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getDate()));
 
@@ -175,10 +224,10 @@ public class DashboardController implements Initializable {
         sharedWithColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getSharedWithNames()));
 
         expensesTableView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
-            selectedExpense = newValue; // Atualiza a despesa selecionada
+            selectedExpense = newValue;
         });
 
-        // Adicionar evento de clique do botão direito
+        // Right-click event
         expensesTableView.setOnMousePressed(event -> {
             if (event.isSecondaryButtonDown()) {
                 Expense selectedExpense = expensesTableView.getSelectionModel().getSelectedItem();
@@ -191,10 +240,8 @@ public class DashboardController implements Initializable {
     }
 
     private void configurePaymentsTableView() {
-        // Set items to the observable list of payments
         paymentsTableView.setItems(payments);
 
-        // Configurar colunas
         TableColumn<Payment, String> paidByColumn = (TableColumn<Payment, String>) paymentsTableView.getColumns().get(0);
         paidByColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getPaidByName()));
 
@@ -207,12 +254,10 @@ public class DashboardController implements Initializable {
         TableColumn<Payment, String> valueColumn = (TableColumn<Payment, String>) paymentsTableView.getColumns().get(3);
         valueColumn.setCellValueFactory(cellData -> new SimpleStringProperty(String.format("%.2f", cellData.getValue().getAmount())));
 
-        // Atualiza o pagamento selecionado
         paymentsTableView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
-            selectedPayment = newValue; // Atualiza o pagamento selecionado
+            selectedPayment = newValue;
         });
 
-        // Adicionar evento de clique do botão direito
         paymentsTableView.setOnMousePressed(event -> {
             if (event.isSecondaryButtonDown()) {
                 Payment selectedPayment = paymentsTableView.getSelectionModel().getSelectedItem();
@@ -225,17 +270,17 @@ public class DashboardController implements Initializable {
     }
 
     private void configureContextMenuItems(Expense selectedExpense) {
-        expensesContextMenu.getItems().get(0).setDisable(false); // Add Expense
-        expensesContextMenu.getItems().get(1).setDisable(selectedExpense == null); // Edit Expense
-        expensesContextMenu.getItems().get(2).setDisable(selectedExpense == null); // Remove Expense
-        expensesContextMenu.getItems().get(3).setDisable(expenses.isEmpty()); // Export to CSV
+        expensesContextMenu.getItems().get(0).setDisable(false);
+        expensesContextMenu.getItems().get(1).setDisable(selectedExpense == null);
+        expensesContextMenu.getItems().get(2).setDisable(selectedExpense == null);
+        expensesContextMenu.getItems().get(3).setDisable(expenses.isEmpty());
     }
 
     private void configurePaymentsContextMenuItems(Payment selectedPayment) {
-        paymentsContextMenu.getItems().get(0).setDisable(false); // Add Payment
-        paymentsContextMenu.getItems().get(1).setDisable(selectedPayment == null); // Edit Payment
-        paymentsContextMenu.getItems().get(2).setDisable(selectedPayment == null); // Remove Payment
-        paymentsContextMenu.getItems().get(3).setDisable(payments.isEmpty()); // Export to CSV
+        paymentsContextMenu.getItems().get(0).setDisable(false);
+        paymentsContextMenu.getItems().get(1).setDisable(selectedPayment == null);
+        paymentsContextMenu.getItems().get(2).setDisable(selectedPayment == null);
+        paymentsContextMenu.getItems().get(3).setDisable(payments.isEmpty());
     }
 
     private void handleEditGroup() {

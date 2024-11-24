@@ -55,7 +55,6 @@ public class RegisterController implements Initializable {
 
         // Send data to server in a new thread to avoid blocking UI
         new Thread(() -> {
-
             String encodedPassword = Base64.getEncoder().encodeToString(password.getBytes());
             User user = new User(name, email, phone, encodedPassword);
 
@@ -63,26 +62,31 @@ public class RegisterController implements Initializable {
             ServerResponse response = clientService.sendRequest(new Message(Message.Type.REGISTER, user));
 
             // Parse the JSON response
-            // Run UI updates on the JavaFX Application thread
             javafx.application.Platform.runLater(() -> {
                 if (response.isSuccess()) {
-                    AlertUtils.showSuccess("Registration Successful", "You can now log in with your email and password");
-                    NavigationManager.switchScene(Routes.LOGIN); // Navigate to login page
+                    // Set the current user after registration
+                    Logger.info("Registration successful for: " + email);
+                    User registeredUser = (User) response.payload();
+                    clientService.setCurrentUser(registeredUser);  // Set the current user properly
+
+                    AlertUtils.showSuccess("Registration Successful", "You can now log in with your email and password.");
+                    NavigationManager.switchScene(Routes.LOGIN); // Navigate to the login page
                 } else {
-                    // Only show error dialog if there was an actual error message
-                    Logger.error(response.message());
+                    Logger.error("Registration failed for email: " + email + " - " + response.message());
                     AlertUtils.showError("Registration Failed", response.message());
                 }
             });
         }).start();
     }
 
+    // Handle the back button to go to the home screen
     public void handleBackAction(ActionEvent actionEvent) {
         NavigationManager.switchScene(Routes.HOME);
     }
 
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
+        // Initialize the client service
         this.clientService = ClientService.getInstance();
     }
 }

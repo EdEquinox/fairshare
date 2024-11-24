@@ -6,6 +6,7 @@ import model.Message;
 import model.ServerResponse;
 import model.User;
 import utils.Logger;
+import javafx.application.Platform;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -26,9 +27,10 @@ public class ClientService {
     private PrintWriter out;
     private BufferedReader in;
     private boolean isConnected = false;
+    private BroadcastListener broadcastListener;
 
     // Private constructor to prevent instantiation
-    public ClientService(String serverIp, int serverPort) {
+    private ClientService(String serverIp, int serverPort) {
         this.serverIp = serverIp;
         this.serverPort = serverPort;
     }
@@ -52,6 +54,36 @@ public class ClientService {
         return false; // Connection failed
     }
 
+    // Start listening for server broadcasts
+    private void startListeningForBroadcasts() {
+        new Thread(() -> {
+            try {
+                while (isConnected) {
+                    // Listen for incoming broadcast messages from the server
+                    String line = in.readLine();
+                    if (line != null && !line.isBlank()) {
+                        try {
+                            ServerResponse response = gson.fromJson(line, ServerResponse.class);
+                            if (broadcastListener != null) {
+                                Platform.runLater(() -> broadcastListener.onBroadcastReceived(response));
+                            }
+                        } catch (JsonSyntaxException e) {
+                            Logger.error("Error parsing broadcast message: " + e.getMessage());
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                Logger.error("Error receiving broadcast message: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    // Register the broadcast listener
+    public void addBroadcastListener(BroadcastListener listener) {
+        this.broadcastListener = listener;
+    }
+
+    // Method to establish the connection to the server
     public boolean connectToServer() {
         int attempts = 0;
         while (attempts < MAX_RETRIES) {
@@ -61,6 +93,9 @@ public class ClientService {
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 Logger.info("Connected to server at " + serverIp + ":" + serverPort);
                 isConnected = true;
+
+                // Start listening for broadcasts after successful connection
+                startListeningForBroadcasts();
                 return true;
             } catch (IOException e) {
                 attempts++;
@@ -83,32 +118,7 @@ public class ClientService {
         return false;
     }
 
-    /**
-     * Receives a message from the server.
-     *
-     * @return The message received, or null if an error occurs.
-     */
-    private ServerResponse receiveResponse() {
-        try {
-            if (in != null) {
-                String line = in.readLine();
-                if (line == null || line.isBlank()) {
-                    Logger.error("Received empty or null response from server.");
-                    return null; // Pode ser personalizado para lançar exceção ou retornar outro valor.
-                }
-
-                try {
-                    return gson.fromJson(line, ServerResponse.class);
-                } catch (JsonSyntaxException e) {
-                    Logger.error("Error parsing JSON response: " + e.getMessage());
-                }
-            }
-        } catch (IOException e) {
-            Logger.error("Error receiving message: " + e.getMessage());
-        }
-        return null; // Retornar null se ocorrer erro ou resposta inválida
-    }
-
+    // Method to send a request to the server
     public ServerResponse sendRequest(Message message) {
         try {
             if (socket == null || socket.isClosed()) {
@@ -135,10 +145,33 @@ public class ClientService {
         }
     }
 
+    private ServerResponse receiveResponse() {
+        try {
+            if (in != null) {
+                String line = in.readLine();
+                if (line == null || line.isBlank()) {
+                    Logger.error("Received empty or null response from server.");
+                    return null;
+                }
+
+                try {
+                    return gson.fromJson(line, ServerResponse.class);
+                } catch (JsonSyntaxException e) {
+                    Logger.error("Error parsing JSON response: " + e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            Logger.error("Error receiving message: " + e.getMessage());
+        }
+        return null;
+    }
+
+    // Check if the client is connected
     public boolean isClientConnected() {
         return isConnected;
     }
 
+    // Close the connection to the server
     public void closeConnection() {
         try {
             if (in != null) {
@@ -156,7 +189,6 @@ public class ClientService {
         }
     }
 
-
     public User getCurrentUser() {
         return this.currentUser;
     }
@@ -165,4 +197,8 @@ public class ClientService {
         this.currentUser = currentUser;
     }
 
+    // Interface to handle broadcast events
+    public interface BroadcastListener {
+        void onBroadcastReceived(ServerResponse response);
+    }
 }

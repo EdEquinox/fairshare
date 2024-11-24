@@ -12,5 +12,6 @@
     <orderEntry type="library" exported="" name="gson-2.10.1" level="project" />
     <orderEntry type="library" exported="" name="sqlite-jdbc-3.47.0.0" level="project" />
     <orderEntry type="module" module-name="Shared" />
+    <orderEntry type="library" name="lib1" level="project" />
   </component>
 </module>
