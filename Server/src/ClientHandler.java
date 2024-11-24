@@ -168,6 +168,7 @@ public class ClientHandler implements Runnable {
                 getUserStatement.setString(1, invite.getReceiverEmail());
                 ResultSet rs = getUserStatement.executeQuery();
 
+
                 if (rs.next()) {
                     receiverId = rs.getInt("id");
                 } else {
@@ -184,6 +185,9 @@ public class ClientHandler implements Runnable {
                 insertInviteStatement.setString(4, invite.getStatus().name());
 
                 int rowsAffected = insertInviteStatement.executeUpdate();
+                updateVersion();
+                String newSQL = "INSERT INTO group_invites (group_id, invited_by, invited_user, status) VALUES (" + invite.getGroupId() + ", " + invite.getSenderId() + ", " + receiverId + ", '" + invite.getStatus().name() + "')";
+                sendHeartbeat(newSQL, getVersion());
                 if (rowsAffected > 0) {
                     Logger.info("Invite created successfully: " + invite);
                     sendResponse(new ServerResponse(true, "Invite created successfully.", null));
@@ -212,11 +216,17 @@ public class ClientHandler implements Runnable {
                 updateInviteStmt.setString(1, Invite.Status.ACCEPTED.name());
                 updateInviteStmt.setInt(2, invite.getId());
                 updateInviteStmt.executeUpdate();
+                updateVersion();
+                String newSQL = "UPDATE group_invites SET status = 'ACCEPTED' WHERE id = " + invite.getId();
+                sendHeartbeat(newSQL, getVersion());
 
                 // Adiciona o usuário ao grupo
                 addUserToGroupStmt.setInt(1, invite.getReceiverId());
                 addUserToGroupStmt.setInt(2, invite.getGroupId());
                 addUserToGroupStmt.executeUpdate();
+                updateVersion();
+                newSQL = "INSERT INTO users_groups (user_id, group_id) VALUES (" + invite.getReceiverId() + ", " + invite.getGroupId() + ")";
+                sendHeartbeat(newSQL, getVersion());
 
                 connection.commit(); // Confirma a transação
                 sendResponse(new ServerResponse(true, "Invite accepted successfully.", null));
@@ -243,6 +253,9 @@ public class ClientHandler implements Runnable {
             statement.setString(1, Invite.Status.DENIED.name());
             statement.setInt(2, invite.getId());
             int rowsAffected = statement.executeUpdate();
+            updateVersion();
+            String newSQL = "UPDATE group_invites SET status = 'DENIED' WHERE id = " + invite.getId();
+            sendHeartbeat(newSQL, getVersion());
 
             if (rowsAffected > 0) {
                 sendResponse(new ServerResponse(true, "Invite declined successfully.", null));
@@ -316,6 +329,9 @@ public class ClientHandler implements Runnable {
             insertStatement.setString(7, convertListToJson(expense.getSharedWith()));
 
             int rowsAffected = insertStatement.executeUpdate();
+            updateVersion();
+            String newSQL = "INSERT INTO expenses (group_id, added_by, paid_by, amount, description, date, shared_with) VALUES (" + expense.getGroupId() + ", " + expense.getAddedBy() + ", " + expense.getPaidBy() + ", " + expense.getAmount() + ", '" + expense.getDescription() + "', '" + expense.getDate() + "', '" + convertListToJson(expense.getSharedWith()) + "')";
+            sendHeartbeat(newSQL, getVersion());
 
             if (rowsAffected > 0) {
                 // Fetch the name of the person who paid
@@ -470,6 +486,9 @@ public class ClientHandler implements Runnable {
             statement.setInt(6, expense.getId());
 
             int rowsAffected = statement.executeUpdate();
+            updateVersion();
+            String newSQL = "UPDATE expenses SET paid_by = " + expense.getPaidBy() + ", amount = " + expense.getAmount() + ", description = '" + expense.getDescription() + "', date = '" + expense.getDate() + "', shared_with = '" + convertListToJson(expense.getSharedWith()) + "' WHERE id = " + expense.getId();
+            sendHeartbeat(newSQL, getVersion());
 
             if (rowsAffected > 0) {
                 Logger.info("Expense updated successfully: " + expense);
@@ -495,6 +514,9 @@ public class ClientHandler implements Runnable {
 
             stmt.setInt(1, expenseId);
             stmt.executeUpdate();
+            updateVersion();
+            String newSQL = "DELETE FROM expenses WHERE id = " + expenseId;
+            sendHeartbeat(newSQL, getVersion());
 
             isSuccess = true;
             message = "Expense deleted successfully.";
@@ -746,6 +768,9 @@ public class ClientHandler implements Runnable {
             statement.setInt(2, group.getId());
 
             int rowsAffected = statement.executeUpdate();
+            updateVersion();
+            String newSQL = "UPDATE groups SET name = '" + group.getName() + "' WHERE id = " + group.getId();
+            sendHeartbeat(newSQL, getVersion());
 
             if (rowsAffected > 0) {
                 Logger.info("Group name updated successfully: " + group);
@@ -787,6 +812,9 @@ public class ClientHandler implements Runnable {
                 deleteStatement.setInt(1, group.getId());
 
                 int rowsAffected = deleteStatement.executeUpdate();
+                updateVersion();
+                String newSQL = "DELETE FROM groups WHERE id = " + group.getId();
+                sendHeartbeat(newSQL, getVersion());
 
                 if (rowsAffected > 0) {
                     Logger.info("Group removed successfully: " + group);

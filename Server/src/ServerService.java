@@ -15,8 +15,8 @@ public class ServerService {
     private final ServerSocket serverSocket;
     private final String multicastAddress = "230.44.44.44";
     private final int multicastPort = 4444;
-    private final int heartbeatInterval = 5000;
-    private final int version = 1;
+    private final int heartbeatInterval = 10000;
+    private int version = 1;
     private final Gson gson = new Gson();
 
     public ServerService(String databasePath, ServerSocket serverSocket) {
@@ -188,6 +188,20 @@ public class ServerService {
         }
     }
 
+    private int getVersion() {
+        String query = "SELECT version FROM version";
+        try(Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath + "/db.db");
+            Statement statement = connection.createStatement();
+            ResultSet resultSet = statement.executeQuery(query);) {
+            version = resultSet.getInt("version");
+            connection.close();
+
+        } catch (Exception e) {
+            Logger.error("Error getting version: " + e.getMessage());
+        }
+        return version;
+    }
+
 
     /**
      * Stops the server and closes the server socket.
@@ -216,7 +230,8 @@ public class ServerService {
         public void run() {
             try (DatagramSocket socket = new DatagramSocket()) {
                 InetAddress group = InetAddress.getByName(multicastAddress);
-                ServerResponse response = new ServerResponse(true, "Heartbeat", null);
+                String message = "HEARTBEAT, version" + version + ", port " + multicastPort;
+                ServerResponse response = new ServerResponse(true, message, null);
                 byte[] data = gson.toJson(response).getBytes();
 
                 while (true) {

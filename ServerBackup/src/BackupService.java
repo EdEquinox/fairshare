@@ -1,7 +1,5 @@
 import com.google.gson.Gson;
-import model.Message;
 import model.ServerResponse;
-import org.apache.commons.logging.Log;
 import utils.Logger;
 
 import java.io.*;
@@ -145,7 +143,7 @@ public class BackupService {
                     ServerResponse response = gson.fromJson(new String(packet.getData(), 0, packet.getLength()), ServerResponse.class);
 
                     if (response.payload()==null){
-                        Logger.info("Received heartbeat from server.");
+                        Logger.info("Received heartbeat from server with message: " + response.message());
                     } else {
                         if (response.isSuccess()) {
                             Logger.info("Main server is alive.");
