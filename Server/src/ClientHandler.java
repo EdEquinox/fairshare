@@ -92,14 +92,22 @@ public class ClientHandler implements Runnable {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class);
                             handleCreateGroup(group);
                         }
+                        case Message.Type.EDIT_GROUP -> {
+                            Group group = gson.fromJson(gson.toJson(message.payload()), Group.class);
+                            handleEditGroup(group);
+                        }
+                        case Message.Type.REMOVE_GROUP -> {
+                            Group group = gson.fromJson(gson.toJson(message.payload()), Group.class);
+                            handleRemoveGroup(group);
+                        }
                         case Message.Type.GET_GROUPS -> {
                             Logger.info("Fetching groups...");
                             User user = gson.fromJson(gson.toJson(message.payload()), User.class);
                             handleGetGroups(user);
                         }
-                        case Message.Type.GET_USERS_FOR_GROUP -> {
+                        case Message.Type.GET_GROUP_USERS -> {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
-                            handleGetUsersForGroup(group);
+                            handleGetGroupUsers(group);
                         }
                         case Message.Type.BACKUP_INIT -> {
                             sendDatabaseFile(clientSocket);
@@ -149,7 +157,6 @@ public class ClientHandler implements Runnable {
         String insertInviteSql = "INSERT INTO group_invites (group_id, invited_by, invited_user, status) VALUES (?, ?, ?, ?)";
 
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
-            // Recupera o receiverId com base no email
             int receiverId;
             try (PreparedStatement getUserStatement = connection.prepareStatement(getUserIdSql)) {
                 getUserStatement.setString(1, invite.getReceiverEmail());
@@ -164,7 +171,6 @@ public class ClientHandler implements Runnable {
                 }
             }
 
-            // Insere o convite na base de dados
             try (PreparedStatement insertInviteStatement = connection.prepareStatement(insertInviteSql)) {
                 insertInviteStatement.setInt(1, invite.getGroupId());
                 insertInviteStatement.setInt(2, invite.getSenderId());
@@ -194,8 +200,7 @@ public class ClientHandler implements Runnable {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
             connection.setAutoCommit(false); // Inicia a transação
 
-            try (PreparedStatement updateInviteStmt = connection.prepareStatement(updateInviteSQL);
-                 PreparedStatement addUserToGroupStmt = connection.prepareStatement(addUserToGroupSQL)) {
+            try (PreparedStatement updateInviteStmt = connection.prepareStatement(updateInviteSQL); PreparedStatement addUserToGroupStmt = connection.prepareStatement(addUserToGroupSQL)) {
 
                 // Atualiza o status do convite para "ACCEPTED"
                 updateInviteStmt.setString(1, Invite.Status.ACCEPTED.name());
@@ -226,8 +231,7 @@ public class ClientHandler implements Runnable {
     private void handleDeclineInvite(Invite invite) {
         String updateInviteSQL = "UPDATE group_invites SET status = ? WHERE id = ?";
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement statement = connection.prepareStatement(updateInviteSQL)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(updateInviteSQL)) {
 
             // Atualiza o status do convite para "DENIED"
             statement.setString(1, Invite.Status.DENIED.name());
@@ -249,16 +253,9 @@ public class ClientHandler implements Runnable {
     }
 
     private void handleGetInvites(User user) {
-        String sql = "SELECT gi.id, gi.group_id, gi.invited_by, gi.invited_user, gi.status, " +
-                "g.name AS group_name, ub.email AS sender_email, ur.email AS receiver_email " +
-                "FROM group_invites gi " +
-                "INNER JOIN groups g ON gi.group_id = g.id " +
-                "INNER JOIN users ub ON gi.invited_by = ub.id " +
-                "INNER JOIN users ur ON gi.invited_user = ur.id " +
-                "WHERE gi.invited_user = ? AND gi.status = 'PENDING'";
+        String sql = "SELECT gi.id, gi.group_id, gi.invited_by, gi.invited_user, gi.status, " + "g.name AS group_name, ub.email AS sender_email, ur.email AS receiver_email " + "FROM group_invites gi " + "INNER JOIN groups g ON gi.group_id = g.id " + "INNER JOIN users ub ON gi.invited_by = ub.id " + "INNER JOIN users ur ON gi.invited_user = ur.id " + "WHERE gi.invited_user = ? AND gi.status = 'PENDING'";
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(sql)) {
 
             statement.setInt(1, user.getId());
 
@@ -266,15 +263,7 @@ public class ClientHandler implements Runnable {
             List<Invite> invites = new ArrayList<>();
 
             while (rs.next()) {
-                Invite invite = new Invite(
-                        rs.getInt("id"),
-                        rs.getInt("group_id"),
-                        rs.getInt("invited_by"),
-                        rs.getInt("invited_user"),
-                        rs.getString("group_name"),
-                        rs.getString("sender_email"),
-                        rs.getString("receiver_email"),
-                        Invite.Status.valueOf(rs.getString("status")) // Enum de status
+                Invite invite = new Invite(rs.getInt("id"), rs.getInt("group_id"), rs.getInt("invited_by"), rs.getInt("invited_user"), rs.getString("group_name"), rs.getString("sender_email"), rs.getString("receiver_email"), Invite.Status.valueOf(rs.getString("status")) // Enum de status
                 );
                 invites.add(invite);
             }
@@ -288,39 +277,63 @@ public class ClientHandler implements Runnable {
     }
 
     private void handleAddExpense(Expense expense) {
-        String query = "INSERT INTO expenses (id, group_id, paid_by, amount, description, date, added_by) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?)";
+        if (expense == null) {
+            Logger.error("Expense is null.");
+            sendResponse(new ServerResponse(false, "Expense data is missing.", null));
+            return;
+        }
 
-        boolean isSuccess = false;
-        String message;
+        String sql = """
+                INSERT INTO expenses (group_id, added_by, paid_by, amount, description, date, shared_with)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+                """;
 
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement stmt = conn.prepareStatement(query)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(sql)) {
 
-            stmt.setInt(1, expense.getId());
-            stmt.setInt(2, expense.getGroupId());
-            stmt.setInt(3, expense.getPaidBy());
-            stmt.setDouble(4, expense.getAmount());
-            stmt.setString(5, expense.getDescription());
-            stmt.setString(6, expense.getDate());
-            stmt.setInt(7, expense.getAddedBy()); // Populate the added_by field
+            if (!groupExists(connection, expense.getGroupId())) {
+                Logger.error("Group does not exist. ID: " + expense.getGroupId());
+                sendResponse(new ServerResponse(false, "Group does not exist.", null));
+                return;
+            }
 
-            int rowsAffected = stmt.executeUpdate();
+            statement.setInt(1, expense.getGroupId());
+            statement.setInt(2, expense.getAddedBy());
+            statement.setInt(3, expense.getPaidBy());
+            statement.setDouble(4, expense.getAmount());
+            statement.setString(5, expense.getDescription());
+            statement.setString(6, expense.getDate());
+            statement.setString(7, convertListToJson(expense.getSharedWith()));
+
+            // Executa a inserçãox
+            int rowsAffected = statement.executeUpdate();
             if (rowsAffected > 0) {
-                isSuccess = true;
-                message = "Expense added successfully.";
-                Logger.info("Expense added to the database: " + expense);
+                Logger.info("Expense added successfully: " + expense);
+                sendResponse(new ServerResponse(true, "Expense added successfully.", null));
             } else {
-                message = "Failed to add expense to the database.";
-                Logger.error("No rows affected while adding expense: " + expense);
+                Logger.error("Failed to add expense: " + expense);
+                sendResponse(new ServerResponse(false, "Failed to add expense.", null));
             }
 
         } catch (SQLException e) {
-            message = "Database error while adding expense.";
             Logger.error("Database error while adding expense: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
         }
+    }
 
-        sendResponse(new ServerResponse(isSuccess, message, null));
+    private boolean groupExists(Connection connection, int groupId) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM groups WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, groupId);
+            ResultSet resultSet = statement.executeQuery();
+            if (resultSet.next()) {
+                return resultSet.getInt(1) > 0;
+            }
+        }
+        return false;
+    }
+
+    private String convertListToJson(List<Integer> list) {
+        return new Gson().toJson(list);
     }
 
     private void handleEditExpense(Expense expense) {
@@ -329,8 +342,7 @@ public class ClientHandler implements Runnable {
         boolean isSuccess = false;
         String message;
 
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement stmt = conn.prepareStatement(query)) {
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement stmt = conn.prepareStatement(query)) {
 
             stmt.setInt(1, expense.getGroupId());
             stmt.setInt(2, expense.getPaidBy());
@@ -358,8 +370,7 @@ public class ClientHandler implements Runnable {
         boolean isSuccess = false;
         String message;
 
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement stmt = conn.prepareStatement(query)) {
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement stmt = conn.prepareStatement(query)) {
 
             stmt.setInt(1, expenseId);
             stmt.executeUpdate();
@@ -381,8 +392,7 @@ public class ClientHandler implements Runnable {
         String query = "SELECT version FROM version";
         int version = 0;
 
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement stmt = conn.prepareStatement(query)) {
+        try (Connection conn = DriverManager.getConnection(url); PreparedStatement stmt = conn.prepareStatement(query)) {
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
                 version = rs.getInt("version");
@@ -398,8 +408,7 @@ public class ClientHandler implements Runnable {
         String url = "jdbc:sqlite:" + databasePath;
         String updateSQL = "UPDATE version SET version = version + 1";
 
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement stmt = conn.prepareStatement(updateSQL)) {
+        try (Connection conn = DriverManager.getConnection(url); PreparedStatement stmt = conn.prepareStatement(updateSQL)) {
             stmt.executeUpdate();
             Logger.info("Version updated successfully");
         } catch (SQLException e) {
@@ -419,8 +428,7 @@ public class ClientHandler implements Runnable {
     }
 
     private void sendDatabaseFile(Socket clientSocket) {
-        try (FileInputStream fis = new FileInputStream(databasePath);
-        OutputStream os = clientSocket.getOutputStream()) {
+        try (FileInputStream fis = new FileInputStream(databasePath); OutputStream os = clientSocket.getOutputStream()) {
             Logger.info("Sending database file to client...");
             byte[] buffer = new byte[4096];
             int bytesRead;
@@ -458,46 +466,38 @@ public class ClientHandler implements Runnable {
 
     }
 
-    private void handleGetUsersForGroup(Group group) {
-        String query = "SELECT u.id, u.name " +
-                "FROM users u " +
-                "JOIN users_groups ug ON u.id = ug.user_id " +
-                "WHERE ug.group_id = ?";
+    private void handleGetGroupUsers(Group group) {
+        String sql = """
+                    SELECT u.id, u.name, u.email, u.phone
+                    FROM users u
+                    INNER JOIN users_groups ug ON u.id = ug.user_id
+                    WHERE ug.group_id = ?
+                """;
 
-        boolean isSuccess = false;
-        String message;
-        List<User> users = new ArrayList<>();
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(sql)) {
 
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement stmt = conn.prepareStatement(query)) {
+            statement.setInt(1, group.getId());
 
-            stmt.setInt(1, group.getId()); // Use group ID in the query
-            ResultSet rs = stmt.executeQuery();
+            ResultSet resultSet = statement.executeQuery();
 
-            // Add User objects to the list
-            while (rs.next()) {
-                User user = new User(rs.getInt("id"), rs.getString("name"));
+            List<User> users = new ArrayList<>();
+
+            while (resultSet.next()) {
+                User user = new User(resultSet.getInt("id"), resultSet.getString("name"), resultSet.getString("email"), resultSet.getString("phone"), null // Senha não é necessária aqui
+                );
                 users.add(user);
-                Logger.info("Fetched user: ID=" + user.getId() + ", Name=" + user.getName());
             }
 
-            if (users.isEmpty()) {
-                message = "No users found for the group.";
-                Logger.info("No users found for group: " + group.name());
+            if (!users.isEmpty()) {
+                sendResponse(new ServerResponse(true, "Users retrieved successfully.", users));
             } else {
-                isSuccess = true;
-                message = "Users retrieved successfully.";
-                Logger.info("Users retrieved for group: " + group.name());
+                sendResponse(new ServerResponse(false, "No users found for the specified group.", null));
             }
 
         } catch (SQLException e) {
-            message = "Error while retrieving users.";
-            Logger.error("Database error while fetching users: " + e.getMessage());
+            Logger.error("Database error while retrieving users for group: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
         }
-
-        // Send a list of User objects
-        Logger.info("Sending users to client: " + gson.toJson(users));
-        sendResponse(new ServerResponse(isSuccess, message, users));
     }
 
     private void handleGetGroups(User user) {
@@ -511,27 +511,19 @@ public class ClientHandler implements Runnable {
 
         // query que seleciona os grupos relacionados a um determinado user_id
         String url = "jdbc:sqlite:" + databasePath;
-        String query = "SELECT g.id, g.name, ug.user_id AS owner_id " +
-                "FROM groups g " +
-                "JOIN users_groups ug ON g.id = ug.group_id " +
-                "WHERE ug.user_id = ?";
+        String query = "SELECT g.id, g.name, ug.user_id AS owner_id " + "FROM groups g " + "JOIN users_groups ug ON g.id = ug.group_id " + "WHERE ug.user_id = ?";
 
         boolean isSuccess = false;
         String message;
         List<Group> groups = new ArrayList<>();
 
-        try (Connection conn = DriverManager.getConnection(url);
-             PreparedStatement stmt = conn.prepareStatement(query)) {
+        try (Connection conn = DriverManager.getConnection(url); PreparedStatement stmt = conn.prepareStatement(query)) {
 
             stmt.setInt(1, user.getId());
             ResultSet rs = stmt.executeQuery();
 
             while (rs.next()) {
-                groups.add(new Group(
-                        rs.getInt("id"),
-                        rs.getString("name"),
-                        rs.getInt("owner_id")
-                ));
+                groups.add(new Group(rs.getInt("id"), rs.getString("name"), rs.getInt("owner_id")));
             }
 
             if (groups.isEmpty()) {
@@ -624,10 +616,74 @@ public class ClientHandler implements Runnable {
         sendResponse(new ServerResponse(isSuccess, message, null));
     }
 
+    private void handleEditGroup(Group group) {
+        String sql = "UPDATE groups SET name = ? WHERE id = ?";
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, group.getName());
+            statement.setInt(2, group.getId());
+
+            int rowsAffected = statement.executeUpdate();
+
+            if (rowsAffected > 0) {
+                Logger.info("Group name updated successfully: " + group);
+                sendResponse(new ServerResponse(true, "Group name updated successfully.", null));
+            } else {
+                Logger.error("Failed to update group name: Group not found. ID: " + group.getId());
+                sendResponse(new ServerResponse(false, "Failed to update group name: Group not found.", null));
+            }
+
+        } catch (SQLException e) {
+            Logger.error("Database error while updating group name: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        }
+    }
+
+    private void handleRemoveGroup(Group group) {
+        String checkDebtsSql = """
+                    SELECT COUNT(*) AS debtCount 
+                    FROM payments 
+                    WHERE group_id = ? AND (amount > 0)
+                """;
+        String deleteGroupSql = "DELETE FROM groups WHERE id = ?";
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
+            // Verifica se existem dívidas ou valores pendentes
+            try (PreparedStatement checkStatement = connection.prepareStatement(checkDebtsSql)) {
+                checkStatement.setInt(1, group.getId());
+                ResultSet resultSet = checkStatement.executeQuery();
+
+                if (resultSet.next() && resultSet.getInt("debtCount") > 0) {
+                    Logger.error("Cannot remove group: Outstanding debts exist for group ID: " + group.getId());
+                    sendResponse(new ServerResponse(false, "Cannot remove group: Outstanding debts exist.", null));
+                    return;
+                }
+            }
+
+            // Remove o grupo
+            try (PreparedStatement deleteStatement = connection.prepareStatement(deleteGroupSql)) {
+                deleteStatement.setInt(1, group.getId());
+
+                int rowsAffected = deleteStatement.executeUpdate();
+
+                if (rowsAffected > 0) {
+                    Logger.info("Group removed successfully: " + group);
+                    sendResponse(new ServerResponse(true, "Group removed successfully.", null));
+                } else {
+                    Logger.error("Failed to remove group: Group not found. ID: " + group.getId());
+                    sendResponse(new ServerResponse(false, "Failed to remove group: Group not found.", null));
+                }
+            }
+        } catch (SQLException e) {
+            Logger.error("Database error while removing group: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        }
+    }
+
     private String getGroupNamefromDB(int groupId) {
         String query = "SELECT name FROM groups WHERE id = ?";
-        try(Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath + "/db.db");
-            PreparedStatement preparedStatement = connection.prepareStatement(query);) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath + "/db.db"); PreparedStatement preparedStatement = connection.prepareStatement(query);) {
             preparedStatement.setInt(1, groupId);
             ResultSet resultSet = preparedStatement.executeQuery();
             String groupName = resultSet.getString("name");
@@ -765,8 +821,7 @@ public class ClientHandler implements Runnable {
 
     private void handleLogin(User user) throws IOException {
 
-        if (user == null || user.getEmail() == null || user.getEmail().isBlank() ||
-                user.getPassword() == null || user.getPassword().isBlank()) {
+        if (user == null || user.getEmail() == null || user.getEmail().isBlank() || user.getPassword() == null || user.getPassword().isBlank()) {
             Logger.error("Invalid login credentials provided.");
             sendResponse(new ServerResponse(false, "Invalid login credentials.", null));
             return;
@@ -787,7 +842,6 @@ public class ClientHandler implements Runnable {
             // Execute the query and check if a matching record exists
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
-                // TODO: Validate password (use BCrypt or another secure method if hashing is implemented)
                 if (rs.getString("password").equals(user.getPassword())) {
                     isSuccess = true;
                     authenticatedUser = new User(rs.getInt("id"), rs.getString("name"), rs.getString("email"), rs.getString("phone"));

@@ -8,7 +8,8 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
-import javafx.scene.text.Text;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.VBox;
 import model.*;
 import resources.components.dialog.ComboBoxOption;
 import resources.components.dialog.CustomDialog;
@@ -19,23 +20,16 @@ import utils.*;
 import java.io.File;
 import java.lang.reflect.Type;
 import java.net.URL;
+import java.time.LocalDate;
 import java.util.*;
 
 public class DashboardController implements Initializable {
 
     @FXML
-    public Label totalSpentLabel;
-    @FXML
-    public Label amountToPayLabel;
-    @FXML
-    public ListView payListView;
-    @FXML
-    public Label amountToReceiveLabel;
-    @FXML
-    public ListView receiveListView;
+    private VBox mainContent;
 
     @FXML
-    private Text userText;
+    private Label totalSpentLabel, amountToPayLabel, amountToReceiveLabel;
 
     @FXML
     private ListView<Group> groupList;
@@ -46,18 +40,16 @@ public class DashboardController implements Initializable {
     @FXML
     private TableView<Expense> expensesTableView;
 
-    // ContextMenu for the TableView
-    private ContextMenu expensesContextMenu;
-
     @FXML
-    public TableView<Payment> paymentsTableView;
+    private TableView<Payment> paymentsTableView;
 
-    private ContextMenu paymentsContextMenu;
+    private ContextMenu groupContextMenu, expensesContextMenu, paymentsContextMenu;
 
     private ClientService clientService;
-    private ObservableList<Group> groups;
-    private ObservableList<User> usersInGroup;
-    private ObservableList<Expense> expenses;
+
+    private ObservableList<Group> groups = FXCollections.observableArrayList();
+    private ObservableList<User> usersInGroup = FXCollections.observableArrayList();
+    private ObservableList<Expense> expenses = FXCollections.observableArrayList();
 
     private User currentUser;
     private Group selectedGroup;
@@ -69,145 +61,196 @@ public class DashboardController implements Initializable {
         clientService = ClientService.getInstance();
         currentUser = clientService.getCurrentUser();
 
-        userText.setText(currentUser.getName());
-        groups = FXCollections.observableArrayList();
-        usersInGroup = FXCollections.observableArrayList();
-        //expenses = FXCollections.observableArrayList();
+        // Hide main content until a group is selected
+        toggleMainContent(false);
 
-        groupList.setItems(groups);
-        userListView.setItems(usersInGroup);
-
-        initializeContextMenu();
-
-        // Add a listener for right-click events
-        expensesTableView.setOnContextMenuRequested(event -> {
-            Expense selectedExpense = expensesTableView.getSelectionModel().getSelectedItem();
-
-            // Enable/Disable context menu items based on the selection
-            configureContextMenuItems(selectedExpense);
-
-            // Show the context menu
-            expensesContextMenu.show(expensesTableView, event.getScreenX(), event.getScreenY());
-        });
-
-        // Hide context menu on left-click
-        expensesTableView.setOnMouseClicked(event -> {
-            if (event.isPrimaryButtonDown()) {
-                expensesContextMenu.hide();
-            }
-        });
-
-        // Configure context menu for the paymentsTableView
-        paymentsTableView.setOnContextMenuRequested(event -> {
-            Payment selectedPayment = paymentsTableView.getSelectionModel().getSelectedItem();
-
-            // Enable/Disable context menu items based on the selection
-            configurePaymentsContextMenuItems(selectedPayment);
-
-            // Show the context menu
-            paymentsContextMenu.show(paymentsTableView, event.getScreenX(), event.getScreenY());
-        });
-
-        // Hide context menu on left-click
-        paymentsTableView.setOnMouseClicked(event -> {
-            if (event.isPrimaryButtonDown()) {
-                paymentsContextMenu.hide();
-            }
-        });
-
-        //dateColumn.setCellValueFactory(new PropertyValueFactory<>("date"));
-        //descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
-        //amountColumn.setCellValueFactory(new PropertyValueFactory<>("amount"));
-        //paidByColumn.setCellValueFactory(new PropertyValueFactory<>("paidBy"));
-
-        // Listener for group selection
-        /*groupList.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
-            if (newValue != null) {
-                handleGroupSelection();
-            }
-        });
-
-        // Listener for user selection
-        userListView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
-            if (newValue != null) {
-                fetchExpensesForUser(newValue); // Pass the selected User object
-            }
-        });
-
-
-        // Configure the cell factory to display user names in the userListView
-        userListView.setCellFactory(param -> new ListCell<>() {
-            @Override
-            protected void updateItem(User user, boolean empty) {
-                super.updateItem(user, empty);
-                if (empty || user == null) {
-                    setText(null);
-                } else {
-                    setText(user.getName()); // Display user name
-                }
-            }
-        });
-*/
-        // Fetch initial group data
+        initializeContextMenus();
+        configureGroupList();
+        configureExpensesTableView();
+        configurePaymentsTableView();
         fetchGroups();
     }
 
-    private void initializeContextMenu() {
-        expensesContextMenu = new ContextMenu();
+    private void toggleMainContent(boolean visible) {
+        mainContent.setVisible(visible);
+        mainContent.setManaged(visible);
+    }
 
-        MenuItem addExpenseItem = new MenuItem("Add Expense");
-        addExpenseItem.setOnAction(event -> handleNewExpense());
+    private void initializeContextMenus() {
+        groupContextMenu = createGroupContextMenu();
+        expensesContextMenu = createExpensesContextMenu();
+        paymentsContextMenu = createPaymentsContextMenu();
+    }
 
-        MenuItem editExpenseItem = new MenuItem("Edit Expense");
-        editExpenseItem.setOnAction(event -> handleEditExpense());
+    private ContextMenu createGroupContextMenu() {
+        MenuItem editGroup = new MenuItem("Edit Group Name");
+        editGroup.setOnAction(event -> handleEditGroup());
 
-        MenuItem removeExpenseItem = new MenuItem("Remove Expense");
-        removeExpenseItem.setOnAction(event -> handleDeleteExpense());
+        MenuItem removeGroup = new MenuItem("Remove Group");
+        removeGroup.setOnAction(event -> handleRemoveGroup());
 
-        MenuItem exportToCsvItem = new MenuItem("Export to CSV");
-        exportToCsvItem.setOnAction(event -> handleExportToCSV());
+        return new ContextMenu(editGroup, removeGroup);
+    }
 
-        expensesContextMenu.getItems().addAll(addExpenseItem, editExpenseItem, removeExpenseItem, exportToCsvItem);
+    private ContextMenu createExpensesContextMenu() {
+        MenuItem addExpense = new MenuItem("Add Expense");
+        addExpense.setOnAction(event -> handleNewExpense());
 
-        paymentsContextMenu = new ContextMenu();
+        MenuItem editExpense = new MenuItem("Edit Expense");
+        editExpense.setOnAction(event -> handleEditExpense());
 
-        // Add Payment Menu Item
-        MenuItem addPaymentItem = new MenuItem("Add Payment");
-        addPaymentItem.setOnAction(event -> handleNewPayment());
+        MenuItem deleteExpense = new MenuItem("Remove Expense");
+        deleteExpense.setOnAction(event -> handleDeleteExpense());
 
-        // Edit Payment Menu Item
-        MenuItem editPaymentItem = new MenuItem("Edit Payment");
-        editPaymentItem.setOnAction(event -> handleEditPayment());
+        MenuItem exportExpenses = new MenuItem("Export to CSV");
+        exportExpenses.setOnAction(event -> handleExportToCSV());
 
-        // Remove Payment Menu Item
-        MenuItem removePaymentItem = new MenuItem("Remove Payment");
-        removePaymentItem.setOnAction(event -> handleDeletePayment());
+        return new ContextMenu(addExpense, editExpense, deleteExpense, exportExpenses);
+    }
 
-        // Export to CSV Menu Item
-        MenuItem exportToCsvItem2 = new MenuItem("Export to CSV");
-        exportToCsvItem2.setOnAction(event -> handleExportToCSV());
+    private ContextMenu createPaymentsContextMenu() {
+        MenuItem addPayment = new MenuItem("Add Payment");
+        addPayment.setOnAction(event -> handleNewPayment());
 
-        // Add items to the context menu
-        paymentsContextMenu.getItems().addAll(addPaymentItem, editPaymentItem, removePaymentItem, exportToCsvItem);
+        MenuItem editPayment = new MenuItem("Edit Payment");
+        editPayment.setOnAction(event -> handleEditPayment());
 
+        MenuItem deletePayment = new MenuItem("Remove Payment");
+        deletePayment.setOnAction(event -> handleDeletePayment());
+
+        MenuItem exportPayments = new MenuItem("Export to CSV");
+        exportPayments.setOnAction(event -> handleExportToCSV());
+
+        return new ContextMenu(addPayment, editPayment, deletePayment, exportPayments);
+    }
+
+    private void configureGroupList() {
+        groupList.setItems(groups);
+
+        // Listener para seleção de grupo
+        groupList.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> handleGroupSelection(newValue));
+
+        // Clique do botão direito para exibir ContextMenu
+        groupList.setOnMousePressed(event -> {
+            if (event.isSecondaryButtonDown()) { // Clique direito
+                Group selectedGroup = groupList.getSelectionModel().getSelectedItem();
+                if (selectedGroup != null) {
+                    groupContextMenu.show(groupList, event.getScreenX(), event.getScreenY());
+                }
+            } else if (event.isPrimaryButtonDown()) { // Clique esquerdo
+                groupContextMenu.hide();
+            }
+        });
+    }
+
+    private void configureExpensesTableView() {
+        expensesTableView.setItems(expenses);
+
+        expensesTableView.setOnMousePressed(event -> {
+            if (event.isSecondaryButtonDown()) {
+                Expense selectedExpense = expensesTableView.getSelectionModel().getSelectedItem();
+                configureContextMenuItems(selectedExpense);
+                expensesContextMenu.show(expensesTableView, event.getScreenX(), event.getScreenY());
+            } else if (event.isPrimaryButtonDown()) {
+                expensesContextMenu.hide();
+            }
+        });
+    }
+
+    private void configurePaymentsTableView() {
+        paymentsTableView.setItems(FXCollections.observableArrayList());
+
+        paymentsTableView.setOnMousePressed(event -> {
+            if (event.isSecondaryButtonDown()) {
+                Payment selectedPayment = paymentsTableView.getSelectionModel().getSelectedItem();
+
+                configurePaymentsContextMenuItems(selectedPayment);
+
+                paymentsContextMenu.show(paymentsTableView, event.getScreenX(), event.getScreenY());
+            } else if (event.isPrimaryButtonDown()) { // Clique esquerdo
+                paymentsContextMenu.hide();
+            }
+        });
     }
 
     private void configureContextMenuItems(Expense selectedExpense) {
-        // Enable/Disable "Edit" and "Remove" based on selection
-        expensesContextMenu.getItems().get(1).setDisable(selectedExpense == null); // Edit
-        expensesContextMenu.getItems().get(2).setDisable(selectedExpense == null); // Remove
-
-        // Enable/Disable "Export to CSV" based on table state
-        expensesContextMenu.getItems().get(3).setDisable(expensesTableView.getItems().isEmpty()); // Export to CSV
+        expensesContextMenu.getItems().get(0).setDisable(false); // Add Expense
+        expensesContextMenu.getItems().get(1).setDisable(selectedExpense == null); // Edit Expense
+        expensesContextMenu.getItems().get(2).setDisable(selectedExpense == null); // Remove Expense
+        expensesContextMenu.getItems().get(3).setDisable(!expenses.isEmpty()); // Export to CSV
     }
 
     private void configurePaymentsContextMenuItems(Payment selectedPayment) {
-        // Enable/Disable "Edit" and "Remove" based on selection
-        paymentsContextMenu.getItems().get(1).setDisable(selectedPayment == null); // Edit
-        paymentsContextMenu.getItems().get(2).setDisable(selectedPayment == null); // Remove
+        paymentsContextMenu.getItems().get(0).setDisable(false); // Add Payment
+        paymentsContextMenu.getItems().get(1).setDisable(selectedPayment == null); // Edit Payment
+        paymentsContextMenu.getItems().get(2).setDisable(selectedPayment == null); // Remove Payment
+        // TODO: Put payments.isEmpty() here!
+        paymentsContextMenu.getItems().get(3).setDisable(false); // Export to CSV
+    }
 
-        // Enable/Disable "Export to CSV" based on table state
-        paymentsContextMenu.getItems().get(3).setDisable(paymentsTableView.getItems().isEmpty()); // Export to CSV
+    private void handleEditGroup() {
+        Group selectedGroup = groupList.getSelectionModel().getSelectedItem();
+        if (selectedGroup == null) {
+            AlertUtils.showError("No group selected", "Please select a group to edit.");
+            return;
+        }
+
+        TextInputDialog dialog = new TextInputDialog(selectedGroup.getName());
+        dialog.setTitle("Edit Group Name");
+        dialog.setHeaderText("Edit the name of the group:");
+        dialog.setContentText("Group Name:");
+
+        Optional<String> result = dialog.showAndWait();
+        result.ifPresent(newName -> {
+            if (newName.isBlank()) {
+                AlertUtils.showError("Invalid Name", "Group name cannot be empty.");
+                return;
+            }
+
+            selectedGroup.setName(newName);
+
+            // Update the group on the server
+            new Thread(() -> {
+                ServerResponse response = clientService.sendRequest(new Message(Message.Type.EDIT_GROUP, selectedGroup));
+                javafx.application.Platform.runLater(() -> {
+                    if (response.isSuccess()) {
+                        AlertUtils.showSuccess("Group Updated", "Group name updated successfully.");
+                        fetchGroups(); // Refresh the list
+                    } else {
+                        AlertUtils.showError("Update Failed", "Failed to update the group: " + response.message());
+                    }
+                });
+            }).start();
+        });
+    }
+
+    private void handleRemoveGroup() {
+        Group selectedGroup = groupList.getSelectionModel().getSelectedItem();
+        if (selectedGroup == null) {
+            AlertUtils.showError("No group selected", "Please select a group to remove.");
+            return;
+        }
+
+        Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION);
+        confirmation.setTitle("Remove Group");
+        confirmation.setHeaderText("Are you sure you want to remove this group?");
+        confirmation.setContentText("This action cannot be undone.");
+
+        Optional<ButtonType> result = confirmation.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            // Send remove request to the server
+            new Thread(() -> {
+                ServerResponse response = clientService.sendRequest(new Message(Message.Type.REMOVE_GROUP, selectedGroup));
+                javafx.application.Platform.runLater(() -> {
+                    if (response.isSuccess()) {
+                        groups.remove(selectedGroup);
+                        AlertUtils.showSuccess("Group Removed", "Group removed successfully.");
+                    } else {
+                        AlertUtils.showError("Remove Failed", "Failed to remove the group: " + response.message());
+                    }
+                });
+            }).start();
+        }
     }
 
     private void fetchGroups() {
@@ -241,37 +284,42 @@ public class DashboardController implements Initializable {
     }
 
     @FXML
-    public void handleGroupSelection() {
-        Group selectedGroup = groupList.getSelectionModel().getSelectedItem();
+    public void handleGroupSelection(Group selectedGroup) {
         if (selectedGroup != null) {
             this.selectedGroup = selectedGroup;
-            fetchUsersForGroup(selectedGroup);
+
+            mainContent.setVisible(true);
+            mainContent.setManaged(true);
+
+            fetchGroupUsers(selectedGroup);
             fetchExpensesForGroup(selectedGroup);
         } else {
-            Logger.error("No group selected.");
+            mainContent.setVisible(false);
+            mainContent.setManaged(false);
         }
     }
 
-    private void fetchUsersForGroup(Group group) {
+    private void fetchGroupUsers(Group group) {
+        if (group == null) {
+            AlertUtils.showError("Error", "No group selected.");
+            Logger.error("No group selected for fetching users.");
+            return;
+        }
+
         new Thread(() -> {
             if (clientService.isClientConnected()) {
-                ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_USERS_FOR_GROUP, group));
+                ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_GROUP_USERS, group));
+
                 javafx.application.Platform.runLater(() -> {
                     if (response.isSuccess()) {
                         try {
-                            // Deserialize the response payload into a list of User objects
                             Type userListType = new TypeToken<List<User>>() {
                             }.getType();
-                            Logger.info("Server payload: " + gson.toJson(response.payload())); // Log the raw payload
-
                             List<User> users = gson.fromJson(gson.toJson(response.payload()), userListType);
-                            Logger.info("Deserialized users: " + users);
 
-                            // Update the observable list with User objects
                             usersInGroup.setAll(users);
-
-                            // Set the cell factory to display usernames in the ListView
                             userListView.setItems(usersInGroup);
+
                             userListView.setCellFactory(param -> new ListCell<User>() {
                                 @Override
                                 protected void updateItem(User user, boolean empty) {
@@ -279,20 +327,25 @@ public class DashboardController implements Initializable {
                                     if (empty || user == null) {
                                         setText(null);
                                     } else {
-                                        setText(user.getName()); // Display the user's name
+                                        setText(user.getName());
                                     }
                                 }
                             });
 
-                            Logger.info("Users fetched successfully for group: " + group.name());
+                            Logger.info("Users fetched successfully for group: " + group.getName());
                         } catch (Exception e) {
-                            Logger.error("Failed to deserialize users: " + e.getMessage());
+                            Logger.error("Failed to parse server response for users: " + e.getMessage());
                             AlertUtils.showError("Error", "Failed to parse server response for users.");
                         }
                     } else {
                         AlertUtils.showError("Error", "Failed to fetch users: " + response.message());
-                        Logger.error("Failed to fetch users for group: " + group.name());
+                        Logger.error("Failed to fetch users for group: " + group.getName());
                     }
+                });
+            } else {
+                javafx.application.Platform.runLater(() -> {
+                    AlertUtils.showError("Error", "Client is not connected to the server.");
+                    Logger.error("Client is not connected to the server.");
                 });
             }
         }).start();
@@ -329,49 +382,13 @@ public class DashboardController implements Initializable {
         }).start();
     }
 
-    private void fetchExpensesForUser(User user) {
-        if (user == null) {
-            Logger.error("No user selected for fetching expenses.");
-            AlertUtils.showError("Error", "Please select a user first.");
-            return;
-        }
-
-        new Thread(() -> {
-            if (clientService.isClientConnected()) {
-                ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_EXPENSES_USER, user.getId()));
-                javafx.application.Platform.runLater(() -> {
-                    if (response.isSuccess()) {
-                        try {
-                            Type expenseListType = new TypeToken<List<Expense>>() {
-                            }.getType();
-                            List<Expense> fetchedExpenses = gson.fromJson(gson.toJson(response.payload()), expenseListType);
-
-                            // Clear and set fetched expenses in the table
-                            expenses.setAll(fetchedExpenses);
-
-                            Logger.info("Expenses fetched successfully for user: " + user.getName());
-                        } catch (Exception e) {
-                            Logger.error("Failed to deserialize expenses: " + e.getMessage());
-                            AlertUtils.showError("Error", "Failed to parse server response.");
-                        }
-                    } else {
-                        // Instead of showing a warning, just clear the expenses table
-                        expenses.clear();
-
-                        Logger.info("No expenses found for user: " + user.getName());
-                    }
-                });
-            }
-        }).start();
-    }
-
+    // TODO: Test better this
     @FXML
     public void handleNewExpense() {
         List<ComboBoxOption> userOptions = usersInGroup.stream()
                 .map(user -> new ComboBoxOption(user.getId(), user.getName()))
                 .toList();
 
-        // Define os campos para o diálogo
         List<FieldConfig> fields = Arrays.asList(
                 new FieldConfig<>("date", "Date", null, FieldType.DATE, true, null, null),
                 new FieldConfig<>("description", "Description", "Enter expense description", FieldType.TEXT, true, null, null),
@@ -383,40 +400,42 @@ public class DashboardController implements Initializable {
         Dialog<Map<String, Object>> dialog = CustomDialog.createDialog("Add New Expense", fields);
 
         Optional<Map<String, Object>> result = dialog.showAndWait();
+
         result.ifPresent(data -> {
             try {
-                String date = (String) data.get("date");
+                // Corrigir a conversão do campo 'date'
+                LocalDate date = (LocalDate) data.get("date");
+                String formattedDate = date != null ? date.toString() : null;
+
                 String description = (String) data.get("description");
                 double amount = Double.parseDouble((String) data.get("amount"));
                 ComboBoxOption paidBy = (ComboBoxOption) data.get("paidBy");
                 List<ComboBoxOption> sharedWith = (List<ComboBoxOption>) data.get("sharedWith");
 
+                // Validação dos campos obrigatórios
                 if (paidBy == null || sharedWith.isEmpty()) {
                     AlertUtils.showError("Invalid Data", "Please select a payer and at least one user to share with.");
                     return;
                 }
 
-                List<Integer> sharedWithIds = sharedWith.stream()
-                        .map(ComboBoxOption::getId)
-                        .toList();
+                List<Integer> sharedWithIds = sharedWith.stream().map(ComboBoxOption::getId).toList();
 
-                Expense newExpense = new Expense(
-                        0, // ID será definido pelo servidor
+                Expense newExpense = new Expense(0, // ID será definido pelo servidor
                         selectedGroup.getId(),
                         paidBy.getId(),
                         currentUser.getId(),
                         amount,
                         description,
-                        date,
+                        formattedDate, // Data formatada corretamente como String
                         sharedWithIds
                 );
 
-                // Envia a nova despesa ao servidor
                 new Thread(() -> {
                     ServerResponse response = clientService.sendRequest(new Message(Message.Type.ADD_EXPENSE, newExpense));
                     javafx.application.Platform.runLater(() -> {
                         if (response.isSuccess()) {
                             expenses.add(newExpense);
+
                             AlertUtils.showSuccess("Success", "Expense added successfully!");
                         } else {
                             AlertUtils.showError("Error", "Failed to add expense: " + response.message());
@@ -514,17 +533,10 @@ public class DashboardController implements Initializable {
     @FXML
     public void handleNewPayment() {
         // Convert users in the group to ComboBoxOptions
-        List<ComboBoxOption> userOptions = usersInGroup.stream()
-                .map(user -> new ComboBoxOption(user.getId(), user.getName()))
-                .toList();
+        List<ComboBoxOption> userOptions = usersInGroup.stream().map(user -> new ComboBoxOption(user.getId(), user.getName())).toList();
 
         // Define fields for the dialog
-        List<FieldConfig> fields = Arrays.asList(
-                new FieldConfig<>("date", "Date", null, FieldType.DATE, true, null, null),
-                new FieldConfig<>("amount", "Value", "Enter the payment amount", FieldType.TEXT, true, null, null),
-                new FieldConfig<>("paidBy", "Paid By", "Select payer", FieldType.COMBOBOX, true, null, userOptions),
-                new FieldConfig<>("receivedBy", "Received By", "Select receiver", FieldType.COMBOBOX, true, null, userOptions)
-        );
+        List<FieldConfig> fields = Arrays.asList(new FieldConfig<>("date", "Date", null, FieldType.DATE, true, null, null), new FieldConfig<>("amount", "Value", "Enter the payment amount", FieldType.TEXT, true, null, null), new FieldConfig<>("paidBy", "Paid By", "Select payer", FieldType.COMBOBOX, true, null, userOptions), new FieldConfig<>("receivedBy", "Received By", "Select receiver", FieldType.COMBOBOX, true, null, userOptions));
 
         Dialog<Map<String, Object>> dialog = CustomDialog.createDialog("Add New Payment", fields);
 
@@ -546,14 +558,8 @@ public class DashboardController implements Initializable {
                     return;
                 }
 
-                Payment newPayment = new Payment(
-                        0, // ID will be set by the server
-                        selectedGroup.getId(),
-                        paidBy.getId(),
-                        receivedBy.getId(),
-                        amount,
-                        date
-                );
+                Payment newPayment = new Payment(0, // ID will be set by the server
+                        selectedGroup.getId(), paidBy.getId(), receivedBy.getId(), amount, date);
 
                 // Send the new payment to the server
                 new Thread(() -> {
@@ -572,6 +578,7 @@ public class DashboardController implements Initializable {
             }
         });
     }
+
     @FXML
     public void handleEditPayment() {
         Payment selectedPayment = paymentsTableView.getSelectionModel().getSelectedItem();
@@ -596,12 +603,7 @@ public class DashboardController implements Initializable {
 
     @FXML
     public void handleEditProfile() {
-        List<FieldConfig> fields = Arrays.asList(
-                new FieldConfig<>("name", "Name", "Enter your name", FieldType.TEXT, true, currentUser.getName(), null),
-                new FieldConfig<>("email", "Email", null, FieldType.TEXT, false, currentUser.getEmail(), null),
-                new FieldConfig<>("phone", "Phone", "Enter your phone", FieldType.TEXT, true, currentUser.getPhone(), null),
-                new FieldConfig<>("password", "Password", "Enter your new password", FieldType.PASSWORD, true, null, null)
-        );
+        List<FieldConfig> fields = Arrays.asList(new FieldConfig<>("name", "Name", "Enter your name", FieldType.TEXT, true, currentUser.getName(), null), new FieldConfig<>("email", "Email", null, FieldType.TEXT, false, currentUser.getEmail(), null), new FieldConfig<>("phone", "Phone", "Enter your phone", FieldType.TEXT, true, currentUser.getPhone(), null), new FieldConfig<>("password", "Password", "Enter your new password", FieldType.PASSWORD, true, null, null));
 
         Dialog<Map<String, Object>> dialog = CustomDialog.createDialog("Edit Profile", fields);
 
@@ -620,9 +622,7 @@ public class DashboardController implements Initializable {
             String encodedPassword = password != null ? Base64.getEncoder().encodeToString(password.getBytes()) : currentUser.getPassword();
 
             new Thread(() -> {
-                ServerResponse response = clientService.sendRequest(
-                        new Message(Message.Type.EDIT_PROFILE, new User(currentUser.getId(), name, email, phone, encodedPassword))
-                );
+                ServerResponse response = clientService.sendRequest(new Message(Message.Type.EDIT_PROFILE, new User(currentUser.getId(), name, email, phone, encodedPassword)));
 
                 javafx.application.Platform.runLater(() -> {
                     if (response.isSuccess()) {
@@ -638,9 +638,7 @@ public class DashboardController implements Initializable {
 
     @FXML
     public void handleNewGroup() {
-        List<FieldConfig> fields = Collections.singletonList(
-                new FieldConfig<>("groupName", "Group Name", "Enter the group name", FieldType.TEXT, true, null, null)
-        );
+        List<FieldConfig> fields = Collections.singletonList(new FieldConfig<>("groupName", "Group Name", "Enter the group name", FieldType.TEXT, true, null, null));
 
         Dialog<Map<String, Object>> dialog = CustomDialog.createDialog("Create New Group", fields);
 
@@ -655,9 +653,7 @@ public class DashboardController implements Initializable {
             }
 
             new Thread(() -> {
-                ServerResponse response = clientService.sendRequest(
-                        new Message(Message.Type.CREATE_GROUP, new Group(groupName, currentUser.getId()))
-                );
+                ServerResponse response = clientService.sendRequest(new Message(Message.Type.CREATE_GROUP, new Group(groupName, currentUser.getId())));
 
                 javafx.application.Platform.runLater(() -> {
                     if (response.isSuccess()) {
@@ -679,5 +675,8 @@ public class DashboardController implements Initializable {
     @FXML
     public void handleLogout() {
         NavigationManager.switchScene(Routes.HOME);
+    }
+
+    public void handleGroupSelection(MouseEvent mouseEvent) {
     }
 }

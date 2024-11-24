@@ -26,7 +26,6 @@
                 <Button text="Add New Group" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
                         onAction="#handleNewGroup"/>
                 <ListView fx:id="groupList" VBox.vgrow="ALWAYS"
-                          onMouseClicked="#handleGroupSelection"
                           style="-fx-background-color: #333333; -fx-text-fill: #FFFFFF; -fx-border-color: #444444;" />
             </VBox>
         </ScrollPane>
@@ -34,7 +33,7 @@
 
     <!-- Main Content -->
     <center>
-        <VBox spacing="10" style="-fx-padding: 15;" VBox.vgrow="ALWAYS">
+        <VBox fx:id="mainContent" spacing="10" style="-fx-padding: 15;" VBox.vgrow="ALWAYS" visible="false" managed="false">
 
             <!-- Small Users List and Group Summary -->
             <HBox spacing="10" VBox.vgrow="NEVER" alignment="CENTER">
@@ -44,7 +43,7 @@
                            textAlignment="CENTER"/>
                     <ListView fx:id="userListView"
                               style="-fx-background-color: #ffffff;"
-                              prefHeight="100" VBox.vgrow="NEVER"/>
+                              prefHeight="200" VBox.vgrow="NEVER"/>
                 </VBox>
 
                 <VBox spacing="5" HBox.hgrow="ALWAYS" alignment="CENTER">
