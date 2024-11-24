@@ -135,7 +135,22 @@ public class ClientHandler implements Runnable {
                             int groupId = gson.fromJson(gson.toJson(message.payload()), Integer.class);
                             handleGetExpenses(groupId);
                         }
-
+                        case Message.Type.ADD_PAYMENT -> {
+                            Payment payment = gson.fromJson(gson.toJson(message.payload()), Payment.class);
+                            handleAddPayment(payment);
+                        }
+                        case Message.Type.EDIT_PAYMENT -> {
+                            Payment payment = gson.fromJson(gson.toJson(message.payload()), Payment.class);
+                            handleEditPayment(payment);
+                        }
+                        case Message.Type.DELETE_PAYMENT -> {
+                            int paymentId = gson.fromJson(gson.toJson(message.payload()), Integer.class);
+                            handleDeletePayment(paymentId);
+                        }
+                        case Message.Type.GET_PAYMENTS -> {
+                            int groupId = gson.fromJson(gson.toJson(message.payload()), Integer.class);
+                            handleGetPayments(groupId);
+                        }
                         default -> sendResponse(new ServerResponse(false, "Invalid command", null));
                     }
                 } catch (Exception e) {
@@ -530,6 +545,172 @@ public class ClientHandler implements Runnable {
         sendResponse(new ServerResponse(isSuccess, message, null));
     }
 
+    private void handleAddPayment(Payment payment) {
+        if (payment == null) {
+            Logger.error("Payment is null.");
+            sendResponse(new ServerResponse(false, "Payment data is missing.", null));
+            return;
+        }
+
+        String insertSql = """
+        INSERT INTO payments (group_id, from_user_id, to_user_id, amount, date)
+        VALUES (?, ?, ?, ?, ?);
+    """;
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement insertStatement = connection.prepareStatement(insertSql)) {
+
+            // Adicionar o novo pagamento à base de dados
+            insertStatement.setInt(1, payment.getGroupId());
+            insertStatement.setInt(2, payment.getPaidBy());
+            insertStatement.setInt(3, payment.getReceivedBy());
+            insertStatement.setDouble(4, payment.getAmount());
+            insertStatement.setString(5, payment.getDate());
+
+            int rowsAffected = insertStatement.executeUpdate();
+            if (rowsAffected == 0) {
+                Logger.error("Failed to add payment to the database.");
+                sendResponse(new ServerResponse(false, "Failed to add payment.", null));
+                return;
+            }
+
+            String paidByName = fetchSharedWithNames(Collections.singletonList(payment.getPaidBy()), connection);
+            String receivedByName = fetchSharedWithNames(Collections.singletonList(payment.getReceivedBy()), connection);
+
+            if (paidByName.equals("Error fetching names") || receivedByName.equals("Error fetching names")) {
+                Logger.error("Error fetching user names for payment.");
+                sendResponse(new ServerResponse(false, "Error fetching user names for payment.", null));
+                return;
+            }
+
+            payment.setPaidByName(paidByName);
+            payment.setReceivedByName(receivedByName);
+
+            Logger.info("Payment added successfully: " + payment);
+            sendResponse(new ServerResponse(true, "Payment added successfully.", payment));
+        } catch (SQLException e) {
+            Logger.error("Database error while adding payment: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        }
+    }
+
+    private void handleEditPayment(Payment payment) {
+        if (payment == null) {
+            Logger.error("Payment is null.");
+            sendResponse(new ServerResponse(false, "Payment data is missing.", null));
+            return;
+        }
+
+        String sql = """
+        UPDATE payments
+        SET date = ?, amount = ?, from_user_id = ?, to_user_id = ?
+        WHERE id = ?;
+    """;
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            // Atualizar os dados do pagamento
+            statement.setString(1, payment.getDate());
+            statement.setDouble(2, payment.getAmount());
+            statement.setInt(3, payment.getPaidBy());
+            statement.setInt(4, payment.getReceivedBy());
+            statement.setInt(5, payment.getId());
+
+            int rowsUpdated = statement.executeUpdate();
+
+            if (rowsUpdated > 0) {
+                Logger.info("Payment updated successfully: " + payment);
+                sendResponse(new ServerResponse(true, "Payment updated successfully.", null));
+            } else {
+                Logger.error("Failed to update payment: " + payment);
+                sendResponse(new ServerResponse(false, "Failed to update payment.", null));
+            }
+        } catch (SQLException e) {
+            Logger.error("Database error while updating payment: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        } catch (Exception e) {
+            Logger.error("Error processing EDIT_PAYMENT: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Error processing request: " + e.getMessage(), null));
+        }
+    }
+
+    private void handleDeletePayment(int paymentId) {
+        if (paymentId <= 0) {
+            Logger.error("Invalid Payment ID.");
+            sendResponse(new ServerResponse(false, "Invalid Payment ID.", null));
+            return;
+        }
+
+        String sql = "DELETE FROM payments WHERE id = ?";
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setInt(1, paymentId);
+
+            int rowsAffected = statement.executeUpdate();
+            if (rowsAffected > 0) {
+                Logger.info("Payment deleted successfully: ID " + paymentId);
+                sendResponse(new ServerResponse(true, "Payment deleted successfully.", null));
+
+            } else {
+                Logger.error("Failed to delete payment: ID " + paymentId);
+                sendResponse(new ServerResponse(false, "Payment not found or already deleted.", null));
+            }
+
+        } catch (SQLException e) {
+            Logger.error("Database error while deleting payment: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        }
+    }
+
+    private void handleGetPayments(Integer groupId) {
+        if (groupId == null) {
+            Logger.error("Group ID is null.");
+            sendResponse(new ServerResponse(false, "Group ID is missing.", null));
+            return;
+        }
+
+        String sql = """
+        SELECT p.id, p.group_id, p.from_user_id, p.to_user_id, p.amount, p.date,
+               u1.name AS paid_by_name, u2.name AS received_by_name
+        FROM payments p
+        INNER JOIN users u1 ON p.from_user_id = u1.id
+        INNER JOIN users u2 ON p.to_user_id = u2.id
+        WHERE p.group_id = ?;
+    """;
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setInt(1, groupId);
+            ResultSet resultSet = statement.executeQuery();
+
+            List<Payment> payments = new ArrayList<>();
+            while (resultSet.next()) {
+                int id = resultSet.getInt("id");
+                int group_id = resultSet.getInt("group_id");
+                int paidBy = resultSet.getInt("from_user_id");
+                int receivedBy = resultSet.getInt("to_user_id");
+                double amount = resultSet.getDouble("amount");
+                String date = resultSet.getString("date");
+                String paidByName = resultSet.getString("paid_by_name");
+                String receivedByName = resultSet.getString("received_by_name");
+
+                payments.add(new Payment(id, group_id, paidBy, receivedBy, amount, date, paidByName, receivedByName));
+            }
+
+            sendResponse(new ServerResponse(true, "Payments fetched successfully.", payments));
+        } catch (SQLException e) {
+            Logger.error("Database error while fetching payments: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        } catch (Exception e) {
+            Logger.error("Error processing GET_PAYMENTS request: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Error processing request: " + e.getMessage(), null));
+        }
+    }
+
     private int getVersion() {
         String url = "jdbc:sqlite:" + databasePath;
         String query = "SELECT version FROM version";
@@ -645,7 +826,6 @@ public class ClientHandler implements Runnable {
 
     private void handleGetGroups(User user) {
 
-        // verificaçao no caso do user ser null ou o id ser menor ou igual a 0
         if (user == null || user.getId() <= 0) {
             Logger.error("Invalid user data received for GET_GROUPS: " + user);
             sendResponse(new ServerResponse(false, "Invalid user data.", null));
