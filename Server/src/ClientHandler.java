@@ -1,4 +1,5 @@
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import model.*;
 import utils.Logger;
 
@@ -9,6 +10,7 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class ClientHandler implements Runnable {
@@ -128,6 +130,10 @@ public class ClientHandler implements Runnable {
                         case Message.Type.DELETE_EXPENSE -> {
                             int expenseId = gson.fromJson(gson.toJson(message.payload()), Integer.class);
                             handleDeleteExpense(expenseId);
+                        }
+                        case Message.Type.GET_EXPENSES -> {
+                            int groupId = gson.fromJson(gson.toJson(message.payload()), Integer.class);
+                            handleGetExpenses(groupId);
                         }
 
                         default -> sendResponse(new ServerResponse(false, "Invalid command", null));
@@ -283,12 +289,16 @@ public class ClientHandler implements Runnable {
             return;
         }
 
-        String sql = """
-                INSERT INTO expenses (group_id, added_by, paid_by, amount, description, date, shared_with)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
-                """;
+        String insertSql = """
+            INSERT INTO expenses (group_id, added_by, paid_by, amount, description, date, shared_with)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+            """;
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(sql)) {
+        String fetchPaidByNameSql = "SELECT name FROM users WHERE id = ?;";
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement insertStatement = connection.prepareStatement(insertSql);
+             PreparedStatement fetchPaidByNameStatement = connection.prepareStatement(fetchPaidByNameSql)) {
 
             if (!groupExists(connection, expense.getGroupId())) {
                 Logger.error("Group does not exist. ID: " + expense.getGroupId());
@@ -296,19 +306,32 @@ public class ClientHandler implements Runnable {
                 return;
             }
 
-            statement.setInt(1, expense.getGroupId());
-            statement.setInt(2, expense.getAddedBy());
-            statement.setInt(3, expense.getPaidBy());
-            statement.setDouble(4, expense.getAmount());
-            statement.setString(5, expense.getDescription());
-            statement.setString(6, expense.getDate());
-            statement.setString(7, convertListToJson(expense.getSharedWith()));
+            // Insert the expense into the database
+            insertStatement.setInt(1, expense.getGroupId());
+            insertStatement.setInt(2, expense.getAddedBy());
+            insertStatement.setInt(3, expense.getPaidBy());
+            insertStatement.setDouble(4, expense.getAmount());
+            insertStatement.setString(5, expense.getDescription());
+            insertStatement.setString(6, expense.getDate());
+            insertStatement.setString(7, convertListToJson(expense.getSharedWith()));
 
-            // Executa a inserçãox
-            int rowsAffected = statement.executeUpdate();
+            int rowsAffected = insertStatement.executeUpdate();
+
             if (rowsAffected > 0) {
+                // Fetch the name of the person who paid
+                fetchPaidByNameStatement.setInt(1, expense.getPaidBy());
+                try (ResultSet resultSet = fetchPaidByNameStatement.executeQuery()) {
+                    if (resultSet.next()) {
+                        String paidByName = resultSet.getString("name");
+                        expense.setPaidByName(paidByName);
+                    } else {
+                        Logger.error("User with ID " + expense.getPaidBy() + " not found.");
+                        expense.setPaidByName("Unknown");
+                    }
+                }
+
                 Logger.info("Expense added successfully: " + expense);
-                sendResponse(new ServerResponse(true, "Expense added successfully.", null));
+                sendResponse(new ServerResponse(true, "Expense added successfully.", expense));
             } else {
                 Logger.error("Failed to add expense: " + expense);
                 sendResponse(new ServerResponse(false, "Failed to add expense.", null));
@@ -317,6 +340,89 @@ public class ClientHandler implements Runnable {
         } catch (SQLException e) {
             Logger.error("Database error while adding expense: " + e.getMessage());
             sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        }
+    }
+
+    private void handleGetExpenses(Integer groupId) {
+        if (groupId == null) {
+            Logger.error("Group ID is null.");
+            sendResponse(new ServerResponse(false, "Group ID is missing.", null));
+            return;
+        }
+
+        String expenseSql = """
+        SELECT e.id, e.group_id, e.added_by, e.paid_by, e.amount, e.description, e.date, e.shared_with,
+               u1.name AS added_by_name, u2.name AS paid_by_name
+        FROM expenses e
+        INNER JOIN users u1 ON e.added_by = u1.id
+        INNER JOIN users u2 ON e.paid_by = u2.id
+        WHERE e.group_id = ?;
+    """;
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement statement = connection.prepareStatement(expenseSql)) {
+
+            statement.setInt(1, groupId);
+            ResultSet resultSet = statement.executeQuery();
+
+            List<Expense> expenses = new ArrayList<>();
+            while (resultSet.next()) {
+                int id = resultSet.getInt("id");
+                int group_id = resultSet.getInt("group_id");
+                int addedBy = resultSet.getInt("added_by");
+                int paidBy = resultSet.getInt("paid_by");
+                double amount = resultSet.getDouble("amount");
+                String description = resultSet.getString("description");
+                String date = resultSet.getString("date");
+                String sharedWithJson = resultSet.getString("shared_with");
+                String addedByName = resultSet.getString("added_by_name");
+                String paidByName = resultSet.getString("paid_by_name");
+
+                // Convert sharedWith JSON array to List<Integer>
+                List<Integer> sharedWithIds = gson.fromJson(sharedWithJson, new TypeToken<List<Integer>>() {}.getType());
+
+                // Fetch names of sharedWith users
+                String sharedWithNames = fetchSharedWithNames(sharedWithIds, connection);
+
+                expenses.add(new Expense(
+                        id, group_id, addedBy, paidBy, amount, description, date, sharedWithIds,
+                        addedByName, paidByName, sharedWithNames));
+            }
+
+            sendResponse(new ServerResponse(true, "Expenses fetched successfully.", expenses));
+        } catch (SQLException e) {
+            Logger.error("Database error while fetching expenses: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        } catch (Exception e) {
+            Logger.error("Error processing GET_EXPENSES: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Error processing request: " + e.getMessage(), null));
+        }
+    }
+
+    private String fetchSharedWithNames(List<Integer> userIds, Connection connection) {
+        if (userIds == null || userIds.isEmpty()) {
+            return "N/A";
+        }
+
+        String placeholders = String.join(",", Collections.nCopies(userIds.size(), "?"));
+        String sql = "SELECT name FROM users WHERE id IN (" + placeholders + ")";
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (int i = 0; i < userIds.size(); i++) {
+                statement.setInt(i + 1, userIds.get(i));
+            }
+
+            ResultSet resultSet = statement.executeQuery();
+            List<String> userNames = new ArrayList<>();
+
+            while (resultSet.next()) {
+                userNames.add(resultSet.getString("name"));
+            }
+
+            return String.join(", ", userNames);
+        } catch (SQLException e) {
+            Logger.error("Error fetching sharedWith names: " + e.getMessage());
+            return "Error fetching names";
         }
     }
 
@@ -337,31 +443,46 @@ public class ClientHandler implements Runnable {
     }
 
     private void handleEditExpense(Expense expense) {
-        String query = "UPDATE expenses SET group_id = ?, paid_by = ?, amount = ?, description = ?, date = ? WHERE id = ?";
-
-        boolean isSuccess = false;
-        String message;
-
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement stmt = conn.prepareStatement(query)) {
-
-            stmt.setInt(1, expense.getGroupId());
-            stmt.setInt(2, expense.getPaidBy());
-            stmt.setDouble(3, expense.getAmount());
-            stmt.setString(4, expense.getDescription());
-            stmt.setString(5, expense.getDate());
-            stmt.setInt(6, expense.getId());
-            stmt.executeUpdate();
-
-            isSuccess = true;
-            message = "Expense updated successfully.";
-            Logger.info("Expense updated in the database: " + expense);
-
-        } catch (SQLException e) {
-            message = "Failed to update expense.";
-            Logger.error("Database error while updating expense: " + e.getMessage());
+        if (expense == null) {
+            Logger.error("Expense is null.");
+            sendResponse(new ServerResponse(false, "Expense data is missing.", null));
+            return;
         }
 
-        sendResponse(new ServerResponse(isSuccess, message, null));
+        String sql = """
+            UPDATE expenses
+            SET paid_by = ?, 
+                amount = ?, 
+                description = ?, 
+                date = ?, 
+                shared_with = ?
+            WHERE id = ?;
+            """;
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setInt(1, expense.getPaidBy());
+            statement.setDouble(2, expense.getAmount());
+            statement.setString(3, expense.getDescription());
+            statement.setString(4, expense.getDate());
+            statement.setString(5, convertListToJson(expense.getSharedWith()));
+            statement.setInt(6, expense.getId());
+
+            int rowsAffected = statement.executeUpdate();
+
+            if (rowsAffected > 0) {
+                Logger.info("Expense updated successfully: " + expense);
+                sendResponse(new ServerResponse(true, "Expense updated successfully.", null));
+            } else {
+                Logger.error("Failed to update expense: " + expense);
+                sendResponse(new ServerResponse(false, "Failed to update expense.", null));
+            }
+
+        } catch (SQLException e) {
+            Logger.error("Database error while updating expense: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        }
     }
 
     private void handleDeleteExpense(int expenseId) {

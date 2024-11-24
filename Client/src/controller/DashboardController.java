@@ -3,6 +3,7 @@ package controller;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import communication.ClientService;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -10,6 +11,7 @@ import javafx.fxml.Initializable;
 import javafx.scene.control.*;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.VBox;
+import javafx.scene.text.Text;
 import model.*;
 import resources.components.dialog.ComboBoxOption;
 import resources.components.dialog.CustomDialog;
@@ -25,6 +27,7 @@ import java.util.*;
 
 public class DashboardController implements Initializable {
 
+    public Text userText, groupText;
     @FXML
     private VBox mainContent;
 
@@ -53,6 +56,7 @@ public class DashboardController implements Initializable {
 
     private User currentUser;
     private Group selectedGroup;
+    private Expense selectedExpense;
 
     private final Gson gson = new Gson();
 
@@ -60,6 +64,7 @@ public class DashboardController implements Initializable {
     public void initialize(URL url, ResourceBundle resourceBundle) {
         clientService = ClientService.getInstance();
         currentUser = clientService.getCurrentUser();
+        userText.setText(currentUser.getName());
 
         // Hide main content until a group is selected
         toggleMainContent(false);
@@ -69,6 +74,7 @@ public class DashboardController implements Initializable {
         configureExpensesTableView();
         configurePaymentsTableView();
         fetchGroups();
+        fetchExpensesForGroup(selectedGroup);
     }
 
     private void toggleMainContent(boolean visible) {
@@ -128,7 +134,10 @@ public class DashboardController implements Initializable {
         groupList.setItems(groups);
 
         // Listener para seleção de grupo
-        groupList.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> handleGroupSelection(newValue));
+        groupList.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+            handleGroupSelection(newValue);
+            groupText.setText(selectedGroup.getName());
+        });
 
         // Clique do botão direito para exibir ContextMenu
         groupList.setOnMousePressed(event -> {
@@ -144,8 +153,30 @@ public class DashboardController implements Initializable {
     }
 
     private void configureExpensesTableView() {
+        // Set items to the observable list of expenses
         expensesTableView.setItems(expenses);
 
+        // Configurar colunas
+        TableColumn<Expense, String> dateColumn = (TableColumn<Expense, String>) expensesTableView.getColumns().get(0);
+        dateColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getDate()));
+
+        TableColumn<Expense, String> descriptionColumn = (TableColumn<Expense, String>) expensesTableView.getColumns().get(1);
+        descriptionColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getDescription()));
+
+        TableColumn<Expense, String> valueColumn = (TableColumn<Expense, String>) expensesTableView.getColumns().get(2);
+        valueColumn.setCellValueFactory(cellData -> new SimpleStringProperty(String.valueOf(cellData.getValue().getAmount())));
+
+        TableColumn<Expense, String> paidByColumn = (TableColumn<Expense, String>) expensesTableView.getColumns().get(3);
+        paidByColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getPaidByName()));
+
+        TableColumn<Expense, String> sharedWithColumn = (TableColumn<Expense, String>) expensesTableView.getColumns().get(4);
+        sharedWithColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getSharedWithNames()));
+
+        expensesTableView.getSelectionModel().selectedItemProperty().addListener((observable, oldValue, newValue) -> {
+            selectedExpense = newValue; // Atualiza a despesa selecionada
+        });
+
+        // Adicionar evento de clique do botão direito
         expensesTableView.setOnMousePressed(event -> {
             if (event.isSecondaryButtonDown()) {
                 Expense selectedExpense = expensesTableView.getSelectionModel().getSelectedItem();
@@ -177,7 +208,7 @@ public class DashboardController implements Initializable {
         expensesContextMenu.getItems().get(0).setDisable(false); // Add Expense
         expensesContextMenu.getItems().get(1).setDisable(selectedExpense == null); // Edit Expense
         expensesContextMenu.getItems().get(2).setDisable(selectedExpense == null); // Remove Expense
-        expensesContextMenu.getItems().get(3).setDisable(!expenses.isEmpty()); // Export to CSV
+        expensesContextMenu.getItems().get(3).setDisable(expenses.isEmpty()); // Export to CSV
     }
 
     private void configurePaymentsContextMenuItems(Payment selectedPayment) {
@@ -353,9 +384,15 @@ public class DashboardController implements Initializable {
 
 
     private void fetchExpensesForGroup(Group group) {
+        if (group == null) {
+            Logger.error("Group is null. Cannot fetch expenses.");
+            return;
+        }
+
         new Thread(() -> {
             if (clientService.isClientConnected()) {
-                ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_EXPENSES, group));
+                ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_EXPENSES, group.getId()));
+
                 javafx.application.Platform.runLater(() -> {
                     if (response.isSuccess()) {
                         try {
@@ -363,26 +400,27 @@ public class DashboardController implements Initializable {
                             }.getType();
                             List<Expense> fetchedExpenses = gson.fromJson(gson.toJson(response.payload()), expenseListType);
 
-                            // Clear and set fetched expenses in the table
                             expenses.setAll(fetchedExpenses);
 
-                            Logger.info("Expenses fetched successfully for group: " + group.name());
+                            Logger.info("Expenses fetched successfully for group: " + group.getName());
                         } catch (Exception e) {
                             Logger.error("Failed to deserialize expenses: " + e.getMessage());
                             AlertUtils.showError("Error", "Failed to parse server response for expenses.");
                         }
                     } else {
-                        // Clear the table and allow adding new expenses
                         expenses.clear();
-
-                        Logger.info("No expenses found for group: " + group.name());
+                        Logger.info("No expenses found or error occurred for group: " + group.getName());
                     }
+                });
+            } else {
+                javafx.application.Platform.runLater(() -> {
+                    AlertUtils.showError("Error", "Client is not connected to the server.");
+                    Logger.error("Client is not connected to the server.");
                 });
             }
         }).start();
     }
 
-    // TODO: Test better this
     @FXML
     public void handleNewExpense() {
         List<ComboBoxOption> userOptions = usersInGroup.stream()
@@ -403,7 +441,6 @@ public class DashboardController implements Initializable {
 
         result.ifPresent(data -> {
             try {
-                // Corrigir a conversão do campo 'date'
                 LocalDate date = (LocalDate) data.get("date");
                 String formattedDate = date != null ? date.toString() : null;
 
@@ -412,13 +449,20 @@ public class DashboardController implements Initializable {
                 ComboBoxOption paidBy = (ComboBoxOption) data.get("paidBy");
                 List<ComboBoxOption> sharedWith = (List<ComboBoxOption>) data.get("sharedWith");
 
-                // Validação dos campos obrigatórios
                 if (paidBy == null || sharedWith.isEmpty()) {
                     AlertUtils.showError("Invalid Data", "Please select a payer and at least one user to share with.");
                     return;
                 }
 
-                List<Integer> sharedWithIds = sharedWith.stream().map(ComboBoxOption::getId).toList();
+                // Converter a lista de ComboBoxOption para uma String separada por vírgulas
+                String sharedWithNames = sharedWith.stream()
+                        .map(ComboBoxOption::getName)
+                        .reduce((name1, name2) -> name1 + ", " + name2)
+                        .orElse("");
+
+                List<Integer> sharedWithIds = sharedWith.stream()
+                        .map(ComboBoxOption::getId)
+                        .toList();
 
                 Expense newExpense = new Expense(0, // ID será definido pelo servidor
                         selectedGroup.getId(),
@@ -426,17 +470,20 @@ public class DashboardController implements Initializable {
                         currentUser.getId(),
                         amount,
                         description,
-                        formattedDate, // Data formatada corretamente como String
-                        sharedWithIds
+                        formattedDate,
+                        sharedWithIds,
+                        paidBy.getName(),
+                        sharedWithNames
                 );
 
                 new Thread(() -> {
                     ServerResponse response = clientService.sendRequest(new Message(Message.Type.ADD_EXPENSE, newExpense));
                     javafx.application.Platform.runLater(() -> {
                         if (response.isSuccess()) {
-                            expenses.add(newExpense);
-
                             AlertUtils.showSuccess("Success", "Expense added successfully!");
+
+                            // Realiza um fetch das despesas do grupo selecionado após adicionar com sucesso
+                            fetchExpensesForGroup(selectedGroup);
                         } else {
                             AlertUtils.showError("Error", "Failed to add expense: " + response.message());
                         }
@@ -450,52 +497,94 @@ public class DashboardController implements Initializable {
 
     @FXML
     public void handleEditExpense() {
-        Expense selectedExpense = null;
-        if (selectedExpense != null) {
-            TextInputDialog dialog = new TextInputDialog(selectedExpense.getDescription());
-            dialog.setTitle("Edit Expense");
-            dialog.setHeaderText("Edit the selected expense");
-            dialog.setContentText("Enter new details (format: date,description,amount):");
-
-            Optional<String> result = dialog.showAndWait();
-            result.ifPresent(input -> {
-                try {
-                    String[] details = input.split(",");
-                    if (details.length != 3) {
-                        throw new IllegalArgumentException("Invalid input format. Use: date,description,amount");
-                    }
-
-                    selectedExpense.setDate(details[0].trim());
-                    selectedExpense.setDescription(details[1].trim());
-                    selectedExpense.setAmount(Double.parseDouble(details[2].trim()));
-
-                    // Send updated expense to the server
-                    ServerResponse response = clientService.sendRequest(new Message(Message.Type.EDIT_EXPENSE, selectedExpense));
-                    if (response.isSuccess()) {
-                        Logger.info("Expense updated: " + selectedExpense);
-                    } else {
-                        AlertUtils.showError("Error", "Failed to edit expense: " + response.message());
-                    }
-
-                } catch (Exception e) {
-                    AlertUtils.showError("Error", "Failed to edit expense: " + e.getMessage());
-                    Logger.error("Failed to edit expense: " + e.getMessage());
-                }
-            });
-        } else {
+        if (selectedExpense == null) {
             AlertUtils.showError("Error", "No expense selected for editing.");
+            return;
         }
+
+        // Mapear os usuários do grupo para ComboBoxOptions
+        List<ComboBoxOption> userOptions = usersInGroup.stream()
+                .map(user -> new ComboBoxOption(user.getId(), user.getName()))
+                .toList();
+
+        // Identificar o ComboBoxOption correto para PaidBy
+        ComboBoxOption selectedPaidByOption = userOptions.stream()
+                .filter(option -> option.getId() == selectedExpense.getPaidBy())
+                .findFirst()
+                .orElse(null);
+
+        // Mapear os usuários compartilhados para Multi-Select
+        List<ComboBoxOption> selectedSharedWithOptions = userOptions.stream()
+                .filter(option -> selectedExpense.getSharedWith().contains(option.getId()))
+                .toList();
+
+        // Configurar os campos do diálogo com os valores existentes
+        List<FieldConfig> fields = Arrays.asList(
+                new FieldConfig<>("date", "Date", null, FieldType.DATE, true, LocalDate.parse(selectedExpense.getDate()), null),
+                new FieldConfig<>("description", "Description", "Enter expense description", FieldType.TEXT, true, selectedExpense.getDescription(), null),
+                new FieldConfig<>("amount", "Value", "Enter the amount", FieldType.TEXT, true, String.valueOf(selectedExpense.getAmount()), null),
+                new FieldConfig<>("paidBy", "Paid By", "Select who paid", FieldType.COMBOBOX, true, selectedPaidByOption, userOptions),
+                new FieldConfig<>("sharedWith", "Shared With", "Select users to share with", FieldType.MULTI_SELECT, true, selectedSharedWithOptions, userOptions)
+        );
+
+        Dialog<Map<String, Object>> dialog = CustomDialog.createDialog("Edit Expense", fields);
+
+        Optional<Map<String, Object>> result = dialog.showAndWait();
+
+        result.ifPresent(data -> {
+            try {
+                // Processar os valores editados
+                LocalDate date = (LocalDate) data.get("date");
+                String formattedDate = date != null ? date.toString() : null;
+
+                String description = (String) data.get("description");
+                double amount = Double.parseDouble((String) data.get("amount"));
+                ComboBoxOption paidBy = (ComboBoxOption) data.get("paidBy");
+                List<ComboBoxOption> sharedWith = (List<ComboBoxOption>) data.get("sharedWith");
+
+                if (paidBy == null || sharedWith.isEmpty()) {
+                    AlertUtils.showError("Invalid Data", "Please select a payer and at least one user to share with.");
+                    return;
+                }
+
+                List<Integer> sharedWithIds = sharedWith.stream()
+                        .map(ComboBoxOption::getId)
+                        .toList();
+
+                // Atualizar a despesa selecionada
+                selectedExpense.setDate(formattedDate);
+                selectedExpense.setDescription(description);
+                selectedExpense.setAmount(amount);
+                selectedExpense.setPaidBy(paidBy.getId());
+                selectedExpense.setPaidByName(paidBy.getName());
+                selectedExpense.setSharedWith(sharedWithIds);
+
+                // Enviar ao servidor
+                new Thread(() -> {
+                    ServerResponse response = clientService.sendRequest(new Message(Message.Type.EDIT_EXPENSE, selectedExpense));
+                    javafx.application.Platform.runLater(() -> {
+                        if (response.isSuccess()) {
+                            AlertUtils.showSuccess("Success", "Expense updated successfully!");
+                            fetchExpensesForGroup(selectedGroup); // Atualiza a tabela
+                        } else {
+                            AlertUtils.showError("Error", "Failed to update expense: " + response.message());
+                        }
+                    });
+                }).start();
+            } catch (Exception e) {
+                AlertUtils.showError("Error", "Invalid data provided: " + e.getMessage());
+            }
+        });
     }
 
     @FXML
     public void handleDeleteExpense() {
-        Expense selectedExpense = null;
         if (selectedExpense != null) {
-            // Send delete request to the server
             ServerResponse response = clientService.sendRequest(new Message(Message.Type.DELETE_EXPENSE, selectedExpense.getId()));
             if (response.isSuccess()) {
                 expenses.remove(selectedExpense);
                 Logger.info("Expense deleted: " + selectedExpense);
+                AlertUtils.showSuccess("Success", "Expense deleted successfully!");
             } else {
                 AlertUtils.showError("Error", "Failed to delete expense: " + response.message());
             }

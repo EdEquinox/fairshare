@@ -22,7 +22,7 @@
                         onAction="#handleLogout"/>
                 <Separator style="-fx-background-color: #555555;"/>
 
-                <Text text="Group Section" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #FFFFFF;"/>
+                <Text fx:id="groupText" text="Group Section" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #FFFFFF;"/>
                 <Button text="Add New Group" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
                         onAction="#handleNewGroup"/>
                 <ListView fx:id="groupList" VBox.vgrow="ALWAYS"
