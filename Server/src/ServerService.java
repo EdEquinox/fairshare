@@ -72,104 +72,119 @@ public class ServerService {
      */
     private void createNewDatabase() {
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
-            Statement statement = connection.createStatement();
-            statement.execute("PRAGMA journal_mode=WAL;");
             Logger.info("Creating tables in new database at: " + databasePath);
 
-            // Create the users table
-            String createUserTableSQL = "CREATE TABLE IF NOT EXISTS users (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "name TEXT NOT NULL, " +
-                    "phone TEXT NOT NULL, " +
-                    "email TEXT NOT NULL UNIQUE, " +
-                    "password TEXT NOT NULL" +
-                    ");";
-            statement.execute(createUserTableSQL);
-            Logger.info("Created table: users");
-
-            // Create the groups table
-            String createGroupTableSQL = "CREATE TABLE IF NOT EXISTS groups (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "name TEXT NOT NULL" +
-                    ");";
-            statement.execute(createGroupTableSQL);
-            Logger.info("Created table: groups");
-
-            // Create the users_groups table (for many-to-many relationship between users and groups)
-            String createUsersGroupsTableSQL = "CREATE TABLE IF NOT EXISTS users_groups (" +
-                    "user_id INTEGER NOT NULL, " +
-                    "group_id INTEGER NOT NULL, " +
-                    "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, " +
-                    "FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE, " +
-                    "PRIMARY KEY(user_id, group_id)" +
-                    ");";
-            statement.execute(createUsersGroupsTableSQL);
-            Logger.info("Created table: users_groups");
-
-            //Create the group_invites table
-            String createGroupInvitesTableSQL = "CREATE TABLE IF NOT EXISTS group_invites (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "group_id INTEGER NOT NULL, " +
-                    "invited_by INTEGER NOT NULL, " +
-                    "invited_user INTEGER NOT NULL, " +
-                    "status TEXT NOT NULL, " +
-                    "FOREIGN KEY(group_id) REFERENCES groups(id), " +
-                    "FOREIGN KEY(invited_by) REFERENCES users(id), " +
-                    "FOREIGN KEY(invited_user) REFERENCES users(id)" +
-                    ");";
-            statement.execute(createGroupInvitesTableSQL);
-            Logger.info("Created table: group_invites");
-
-            // Create the expenses table
-            String createExpenseTableSQL = "CREATE TABLE IF NOT EXISTS expenses (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "group_id INTEGER NOT NULL, " +
-                    "added_by INTEGER NOT NULL, " +
-                    "paid_by INTEGER NOT NULL, " +
-                    "amount REAL NOT NULL, " +
-                    "description TEXT, " +
-                    "date TEXT, " +
-                    "FOREIGN KEY(group_id) REFERENCES groups(id), " +
-                    "FOREIGN KEY(added_by) REFERENCES users(id), " +
-                    "FOREIGN KEY(paid_by) REFERENCES users(id)" +
-                    ");";
-            statement.execute(createExpenseTableSQL);
-            Logger.info("Created table: expenses");
-
-            // Create the payments table
-            String createPaymentTableSQL = "CREATE TABLE IF NOT EXISTS payments (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "from_user_id INTEGER NOT NULL, " +
-                    "to_user_id INTEGER NOT NULL, " +
-                    "amount REAL NOT NULL, " +
-                    "date TEXT, " +
-                    "group_id INTEGER NOT NULL, " +
-                    "FOREIGN KEY(from_user_id) REFERENCES users(id), " +
-                    "FOREIGN KEY(to_user_id) REFERENCES users(id), " +
-                    "FOREIGN KEY(group_id) REFERENCES groups(id)" +
-                    ");";
-            statement.execute(createPaymentTableSQL);
-            Logger.info("Created table: payments");
-
-            // Create the version table
-            String createVersionTableSQL = "CREATE TABLE IF NOT EXISTS version (" +
-                    "version INTEGER NOT NULL" +
-                    ");";
-            statement.execute(createVersionTableSQL);
-            Logger.info("Created table: version");
-
-            // Set the version number if not already present
-            String checkVersionExistsSQL = "SELECT COUNT(*) AS count FROM version";
-            ResultSet rs = statement.executeQuery(checkVersionExistsSQL);
-            if (rs.next() && rs.getInt("count") == 0) {
-                String setVersionSQL = "INSERT INTO version (version) VALUES (0);";
-                statement.executeUpdate(setVersionSQL);
-                Logger.info("Inserted initial version number 0 into version table.");
+            // Enable Write-Ahead Logging for better concurrency
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("PRAGMA journal_mode=WAL;");
             }
 
-            Logger.info("New database created successfully with version 0 at " + databasePath);
+            // Create tables
+            createTable(connection, "users", """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    phone TEXT NOT NULL,
+                    email TEXT NOT NULL UNIQUE,
+                    password TEXT NOT NULL
+                );""");
+
+            createTable(connection, "groups", """
+                CREATE TABLE IF NOT EXISTS groups (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL
+                );""");
+
+            createTable(connection, "users_groups", """
+                CREATE TABLE IF NOT EXISTS users_groups (
+                    user_id INTEGER NOT NULL,
+                    group_id INTEGER NOT NULL,
+                    PRIMARY KEY(user_id, group_id),
+                    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE
+                );""");
+
+            createTable(connection, "group_invites", """
+                CREATE TABLE IF NOT EXISTS group_invites (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    group_id INTEGER NOT NULL,
+                    invited_by INTEGER NOT NULL,
+                    invited_user INTEGER NOT NULL,
+                    status TEXT CHECK(status IN ('PENDING', 'ACCEPTED', 'DENIED')) NOT NULL DEFAULT 'pending',
+                    FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE,
+                    FOREIGN KEY(invited_by) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY(invited_user) REFERENCES users(id) ON DELETE CASCADE
+                );""");
+
+            createTable(connection, "expenses", """
+                CREATE TABLE IF NOT EXISTS expenses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    group_id INTEGER NOT NULL,
+                    added_by INTEGER NOT NULL,
+                    paid_by INTEGER NOT NULL,
+                    amount REAL NOT NULL CHECK(amount > 0),
+                    description TEXT,
+                    date TEXT NOT NULL,
+                    shared_with TEXT NOT NULL, -- JSON array of user IDs
+                    FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE,
+                    FOREIGN KEY(added_by) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY(paid_by) REFERENCES users(id) ON DELETE CASCADE
+                );""");
+
+            createTable(connection, "payments", """
+                CREATE TABLE IF NOT EXISTS payments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    from_user_id INTEGER NOT NULL,
+                    to_user_id INTEGER NOT NULL,
+                    amount REAL NOT NULL CHECK(amount > 0),
+                    date TEXT NOT NULL,
+                    group_id INTEGER NOT NULL,
+                    FOREIGN KEY(from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY(to_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE
+                );""");
+
+            createTable(connection, "version", """
+                CREATE TABLE IF NOT EXISTS version (
+                    version INTEGER NOT NULL
+                );""");
+
+            // Insert initial version if not present
+            ensureVersionExists(connection);
+
+            Logger.info("New database created successfully at: " + databasePath);
         } catch (Exception e) {
             Logger.error("Error creating new database: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Helper method to create a table if it doesn't exist.
+     */
+    private void createTable(Connection connection, String tableName, String createSQL) {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute(createSQL);
+            Logger.info("Created table: " + tableName);
+        } catch (Exception e) {
+            Logger.error("Error creating table " + tableName + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Ensure the version table has an initial entry.
+     */
+    private void ensureVersionExists(Connection connection) {
+        String checkVersionSQL = "SELECT COUNT(*) AS count FROM version;";
+        String insertVersionSQL = "INSERT INTO version (version) VALUES (0);";
+
+        try (Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery(checkVersionSQL)) {
+            if (rs.next() && rs.getInt("count") == 0) {
+                statement.executeUpdate(insertVersionSQL);
+                Logger.info("Inserted initial version number 0 into version table.");
+            }
+        } catch (Exception e) {
+            Logger.error("Error ensuring version entry: " + e.getMessage());
         }
     }
 

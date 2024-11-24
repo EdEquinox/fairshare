@@ -17,7 +17,7 @@
 
         <ComboBox fx:id="groupComboBox" prefHeight="25.0" prefWidth="582.0" />
 
-        <Button onAction="#handleInviteButtonAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #FF9800; -fx-text-fill: white;" text="Invite" />
+        <Button onAction="#handleSendInvite" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #FF9800; -fx-text-fill: white;" text="Invite" />
 
         <Button onAction="#handleBackButtonAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #007BFF; -fx-text-fill: white;" text="Back" />
 

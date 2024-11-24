@@ -72,6 +72,22 @@ public class ClientHandler implements Runnable {
                             User user = gson.fromJson(gson.toJson(message.payload()), User.class);
                             handleGetProfile(user);
                         }
+                        case Message.Type.CREATE_INVITE -> {
+                            Invite invite = gson.fromJson(gson.toJson(message.payload()), Invite.class);
+                            handleCreateInvite(invite);
+                        }
+                        case Message.Type.ACCEPT_INVITE -> {
+                            Invite invite = gson.fromJson(gson.toJson(message.payload()), Invite.class);
+                            handleAcceptInvite(invite);
+                        }
+                        case Message.Type.DECLINE_INVITE -> {
+                            Invite invite = gson.fromJson(gson.toJson(message.payload()), Invite.class);
+                            handleDeclineInvite(invite);
+                        }
+                        case Message.Type.GET_INVITES -> {
+                            User user = gson.fromJson(gson.toJson(message.payload()), User.class);
+                            handleGetInvites(user);
+                        }
                         case Message.Type.CREATE_GROUP -> {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class);
                             handleCreateGroup(group);
@@ -81,35 +97,12 @@ public class ClientHandler implements Runnable {
                             User user = gson.fromJson(gson.toJson(message.payload()), User.class);
                             handleGetGroups(user);
                         }
-                        case Message.Type.GET_PENDING_INVITES  -> {
-                            User user = gson.fromJson(gson.toJson(message.payload()), User.class);
-                            handleGetInvites(user);
-                        }
-                        case Message.Type.INVITE -> {
-                            ArrayList<Object> payload = gson.fromJson(gson.toJson(message.payload()), ArrayList.class);
-                            Group group = gson.fromJson(gson.toJson(payload.get(0)), Group.class);
-                            User user = gson.fromJson(gson.toJson(payload.get(1)), User.class);
-                            String email = gson.fromJson(gson.toJson(payload.get(2)), String.class);
-                            sendInvite(user, group, email);
-                        }
                         case Message.Type.GET_USERS_FOR_GROUP -> {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
                             handleGetUsersForGroup(group);
                         }
                         case Message.Type.BACKUP_INIT -> {
                             sendDatabaseFile(clientSocket);
-                        }
-                        case Message.Type.ACCEPT_INVITE -> {
-                            ArrayList<Object> payload = gson.fromJson(gson.toJson(message.payload()), ArrayList.class);
-                            Invite invite = gson.fromJson(gson.toJson(payload.get(0)), Invite.class);
-                            User user = gson.fromJson(gson.toJson(payload.get(1)), User.class);
-                            acceptInvite(invite, user);
-                        }
-                        case Message.Type.DECLINE_INVITE -> {
-                            ArrayList<Object> payload = gson.fromJson(gson.toJson(message.payload()), ArrayList.class);
-                            Invite invite = gson.fromJson(gson.toJson(payload.get(0)), Invite.class);
-                            User user = gson.fromJson(gson.toJson(payload.get(1)), User.class);
-                            declineInvite(invite, user);
                         }
                         case Message.Type.GET_GROUP_NAME -> {
                             int groupId = gson.fromJson(gson.toJson(message.payload()), Integer.class);
@@ -151,6 +144,148 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    private void handleCreateInvite(Invite invite) {
+        String getUserIdSql = "SELECT id FROM users WHERE email = ?";
+        String insertInviteSql = "INSERT INTO group_invites (group_id, invited_by, invited_user, status) VALUES (?, ?, ?, ?)";
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
+            // Recupera o receiverId com base no email
+            int receiverId;
+            try (PreparedStatement getUserStatement = connection.prepareStatement(getUserIdSql)) {
+                getUserStatement.setString(1, invite.getReceiverEmail());
+                ResultSet rs = getUserStatement.executeQuery();
+
+                if (rs.next()) {
+                    receiverId = rs.getInt("id");
+                } else {
+                    Logger.error("No user found with email: " + invite.getReceiverEmail());
+                    sendResponse(new ServerResponse(false, "No user found with the provided email.", null));
+                    return;
+                }
+            }
+
+            // Insere o convite na base de dados
+            try (PreparedStatement insertInviteStatement = connection.prepareStatement(insertInviteSql)) {
+                insertInviteStatement.setInt(1, invite.getGroupId());
+                insertInviteStatement.setInt(2, invite.getSenderId());
+                insertInviteStatement.setInt(3, receiverId);
+                insertInviteStatement.setString(4, invite.getStatus().name());
+
+                int rowsAffected = insertInviteStatement.executeUpdate();
+                if (rowsAffected > 0) {
+                    Logger.info("Invite created successfully: " + invite);
+                    sendResponse(new ServerResponse(true, "Invite created successfully.", null));
+                } else {
+                    Logger.error("Failed to create invite: " + invite);
+                    sendResponse(new ServerResponse(false, "Failed to create invite.", null));
+                }
+            }
+
+        } catch (SQLException e) {
+            Logger.error("Database error while creating invite: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        }
+    }
+
+    private void handleAcceptInvite(Invite invite) {
+        String updateInviteSQL = "UPDATE group_invites SET status = ? WHERE id = ?";
+        String addUserToGroupSQL = "INSERT INTO users_groups (user_id, group_id) VALUES (?, ?)";
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
+            connection.setAutoCommit(false); // Inicia a transação
+
+            try (PreparedStatement updateInviteStmt = connection.prepareStatement(updateInviteSQL);
+                 PreparedStatement addUserToGroupStmt = connection.prepareStatement(addUserToGroupSQL)) {
+
+                // Atualiza o status do convite para "ACCEPTED"
+                updateInviteStmt.setString(1, Invite.Status.ACCEPTED.name());
+                updateInviteStmt.setInt(2, invite.getId());
+                updateInviteStmt.executeUpdate();
+
+                // Adiciona o usuário ao grupo
+                addUserToGroupStmt.setInt(1, invite.getReceiverId());
+                addUserToGroupStmt.setInt(2, invite.getGroupId());
+                addUserToGroupStmt.executeUpdate();
+
+                connection.commit(); // Confirma a transação
+                sendResponse(new ServerResponse(true, "Invite accepted successfully.", null));
+                Logger.info("Invite accepted and user added to group: " + invite);
+
+            } catch (SQLException e) {
+                connection.rollback(); // Reverte a transação em caso de erro
+                Logger.error("Error while accepting invite: " + e.getMessage());
+                sendResponse(new ServerResponse(false, "Error while accepting invite: " + e.getMessage(), null));
+            }
+
+        } catch (SQLException e) {
+            Logger.error("Database connection error while accepting invite: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        }
+    }
+
+    private void handleDeclineInvite(Invite invite) {
+        String updateInviteSQL = "UPDATE group_invites SET status = ? WHERE id = ?";
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement statement = connection.prepareStatement(updateInviteSQL)) {
+
+            // Atualiza o status do convite para "DENIED"
+            statement.setString(1, Invite.Status.DENIED.name());
+            statement.setInt(2, invite.getId());
+            int rowsAffected = statement.executeUpdate();
+
+            if (rowsAffected > 0) {
+                sendResponse(new ServerResponse(true, "Invite declined successfully.", null));
+                Logger.info("Invite declined: " + invite);
+            } else {
+                sendResponse(new ServerResponse(false, "No invite found with the given ID.", null));
+                Logger.error("Failed to decline invite - no invite found with ID: " + invite.getId());
+            }
+
+        } catch (SQLException e) {
+            Logger.error("Database error while declining invite: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Error while declining invite: " + e.getMessage(), null));
+        }
+    }
+
+    private void handleGetInvites(User user) {
+        String sql = "SELECT gi.id, gi.group_id, gi.invited_by, gi.invited_user, gi.status, " +
+                "g.name AS group_name, ub.email AS sender_email, ur.email AS receiver_email " +
+                "FROM group_invites gi " +
+                "INNER JOIN groups g ON gi.group_id = g.id " +
+                "INNER JOIN users ub ON gi.invited_by = ub.id " +
+                "INNER JOIN users ur ON gi.invited_user = ur.id " +
+                "WHERE gi.invited_user = ? AND gi.status = 'PENDING'";
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setInt(1, user.getId());
+
+            ResultSet rs = statement.executeQuery();
+            List<Invite> invites = new ArrayList<>();
+
+            while (rs.next()) {
+                Invite invite = new Invite(
+                        rs.getInt("id"),
+                        rs.getInt("group_id"),
+                        rs.getInt("invited_by"),
+                        rs.getInt("invited_user"),
+                        rs.getString("group_name"),
+                        rs.getString("sender_email"),
+                        rs.getString("receiver_email"),
+                        Invite.Status.valueOf(rs.getString("status")) // Enum de status
+                );
+                invites.add(invite);
+            }
+
+            sendResponse(new ServerResponse(true, "Pending invites retrieved successfully.", invites));
+
+        } catch (SQLException e) {
+            Logger.error("Database error while retrieving invites: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        }
+    }
 
     private void handleAddExpense(Expense expense) {
         String query = "INSERT INTO expenses (id, group_id, paid_by, amount, description, date, added_by) " +
@@ -188,7 +323,6 @@ public class ClientHandler implements Runnable {
         sendResponse(new ServerResponse(isSuccess, message, null));
     }
 
-
     private void handleEditExpense(Expense expense) {
         String query = "UPDATE expenses SET group_id = ?, paid_by = ?, amount = ?, description = ?, date = ? WHERE id = ?";
 
@@ -218,7 +352,6 @@ public class ClientHandler implements Runnable {
         sendResponse(new ServerResponse(isSuccess, message, null));
     }
 
-
     private void handleDeleteExpense(int expenseId) {
         String query = "DELETE FROM expenses WHERE id = ?";
 
@@ -241,93 +374,6 @@ public class ClientHandler implements Runnable {
         }
 
         sendResponse(new ServerResponse(isSuccess, message, null));
-    }
-
-
-    private void acceptInvite(Invite invite, User user) {
-        String url = "jdbc:sqlite:" + databasePath;
-        String updateSQL = "UPDATE group_invites SET status = 'accepted' WHERE id = ? AND invited_user = ?";
-        String insertUserGroupSQL = "INSERT INTO users_groups (user_id, group_id) VALUES (?, ?)";
-        String checkUserGroupSQL = "SELECT COUNT(*) FROM users_groups WHERE user_id = ? AND group_id = ?";
-        boolean isSuccess = false;
-        String message;
-        try (Connection conn = DriverManager.getConnection(url)) {
-            conn.setAutoCommit(false);
-
-            try (PreparedStatement checkUserGroupStmt = conn.prepareStatement(checkUserGroupSQL)) {
-                checkUserGroupStmt.setInt(1, user.getId());
-                checkUserGroupStmt.setInt(2, invite.getGroupId());
-                ResultSet rs = checkUserGroupStmt.executeQuery();
-                if (rs.next() && rs.getInt(1) > 0) {
-                    Logger.info("User already associated with group: User ID " + user.getId() + ", Group ID " + invite.getGroupId());
-                    message = "User already associated with group";
-                    sendResponse(new ServerResponse(isSuccess, message, null));
-                    return;
-                }
-            }
-
-            try (PreparedStatement updateStmt = conn.prepareStatement(updateSQL)) {
-                updateStmt.setInt(1, invite.getId());
-                updateStmt.setInt(2, user.getId());
-                updateStmt.executeUpdate();
-                Logger.info("Invite accepted successfully");
-            }
-
-            try (PreparedStatement insertUserGroupStmt = conn.prepareStatement(insertUserGroupSQL)) {
-                insertUserGroupStmt.setInt(1, user.getId());
-                insertUserGroupStmt.setInt(2, invite.getGroupId());
-                insertUserGroupStmt.executeUpdate();
-                Logger.info("User associated with group: User ID " + user.getId() + ", Group ID " + invite.getGroupId());
-            }
-
-            conn.commit();
-            updateVersion();
-            updateSQL = "UPDATE group_invites SET status = 'accepted' WHERE id = " + invite.getId() + " AND invited_user = " + user.getId();
-            sendHeartbeat(updateSQL, getVersion());
-            updateVersion();
-            insertUserGroupSQL = "INSERT INTO users_groups (user_id, group_id) VALUES (" + user.getId() + ", " + invite.getGroupId() + ")";
-            sendHeartbeat(insertUserGroupSQL, getVersion());
-            isSuccess = true;
-            message = "Invite accepted successfully";
-            sendResponse(new ServerResponse(isSuccess, message, null));
-        } catch (SQLException e) {
-            Logger.error("Database error while accepting invite: " + e.getMessage());
-            message = "Error while accepting invite";
-            isSuccess = false;
-            sendResponse(new ServerResponse(isSuccess, message, null));
-        }
-
-    }
-
-    private void declineInvite(Invite invite, User user) {
-        String url = "jdbc:sqlite:" + databasePath;
-        String updateSQL = "UPDATE group_invites SET status = 'declined' WHERE id = ? AND invited_user = ?";
-
-        boolean isSuccess = false;
-        String message;
-
-        try (Connection conn = DriverManager.getConnection(url)) {
-            try (PreparedStatement updateStmt = conn.prepareStatement(updateSQL)) {
-                updateStmt.setInt(1, invite.getId());
-                updateStmt.setInt(2, user.getId());
-                updateStmt.executeUpdate();
-                Logger.info("Invite declined successfully");
-                isSuccess = true;
-                message = "Invite declined successfully";
-            }
-        } catch (SQLException e) {
-            Logger.error("Database error while declining invite: " + e.getMessage());
-            message = "Error while declining invite";
-            isSuccess = false;
-        }
-
-        updateVersion();
-        updateSQL = "UPDATE group_invites SET status = 'declined' WHERE id = " + invite.getId() + " AND invited_user = " + user.getId();
-        sendHeartbeat(updateSQL, getVersion());
-
-
-        sendResponse(new ServerResponse(isSuccess, message, null));
-
     }
 
     private int getVersion() {
@@ -593,68 +639,6 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    private void handleGetInvites(User user) {
-
-        String url = "jdbc:sqlite:" + databasePath;
-        String querySQL = "SELECT gi.id, gi.group_id, gi.invited_user, gi.invited_by, gi.status, g.name AS group_name " +
-                "FROM group_invites gi " +
-                "JOIN groups g ON gi.group_id = g.id " +
-                "WHERE gi.invited_user = ? AND gi.status = 'pending'";
-
-        String groupNameQuery = "SELECT name FROM groups WHERE id = ?";
-        String inviterNameQuery = "SELECT name FROM users WHERE id = ?";
-        String groupName;
-        String inviterName;
-        boolean isSuccess = false;
-        String message;
-        List<Invite> invites = new ArrayList<>();
-
-        try (Connection conn = DriverManager.getConnection(url)) {
-            try (PreparedStatement inviterNameStmt = conn.prepareStatement(inviterNameQuery)) {
-                try (PreparedStatement groupNameStmt = conn.prepareStatement(groupNameQuery)) {
-                    try (PreparedStatement stmt = conn.prepareStatement(querySQL)) {
-                        stmt.setInt(1, user.getId());
-                        ResultSet rs = stmt.executeQuery();
-                        while (rs.next()) {
-                            groupNameStmt.setInt(1, rs.getInt("group_id"));
-                            inviterNameStmt.setInt(1, rs.getInt("invited_by"));
-                            ResultSet rs2 = groupNameStmt.executeQuery();
-                            ResultSet rs3 = inviterNameStmt.executeQuery();
-                            if (rs2.next()) {
-                                groupName = rs2.getString("name");
-                                inviterName = rs3.getString("name");
-                                invites.add(new Invite(
-                                        rs.getInt("id"),
-                                        rs.getInt("group_id"),
-                                        rs.getInt("invited_by"),
-                                        rs.getInt("invited_user"),
-                                        groupName,
-                                        inviterName
-                                ));
-                            }
-                        }
-                        if (invites.isEmpty()) {
-                            message = "No invites found for the user.";
-                            Logger.info("No invites found for user ID: " + user.getId());
-                        } else {
-                            isSuccess = true;
-                            message = "Invites retrieved successfully.";
-                            Logger.info("Invites retrieved for user ID: " + user.getId() + ": " + invites);
-                        }
-
-                    }
-                }
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
-        } catch (SQLException e) {
-            message = "Error while retrieving invites";
-            Logger.error("Database error while fetching invites: " + e.getMessage());
-        }
-
-        sendResponse(new ServerResponse(isSuccess, message, invites));
-    }
-
     private void handleLogout(User user) {
         try {
             Logger.info("User requested logout. Closing connection.");
@@ -824,87 +808,6 @@ public class ClientHandler implements Runnable {
 
         ServerResponse response = new ServerResponse(isSuccess, message, authenticatedUser);
         sendResponse(response);
-    }
-
-    private void sendInvite(User user, Group group, String email) {
-        String url = "jdbc:sqlite:" + databasePath;
-        String checkInviteeSQL = "SELECT COUNT(*) FROM users WHERE email = ?";
-        String checkGroupSQL = "SELECT COUNT(*) FROM groups WHERE id = ?";
-        String insertSQL = "INSERT INTO group_invites (group_id, invited_user, invited_by, status) VALUES (?, ?, ?, 'pending')";
-
-        try (Connection conn = DriverManager.getConnection(url)) {
-            // Check if the invitee email exists
-            try (PreparedStatement checkInviteeStmt = conn.prepareStatement(checkInviteeSQL)) {
-                checkInviteeStmt.setString(1, email);
-                ResultSet rs = checkInviteeStmt.executeQuery();
-                if (!rs.next() || rs.getInt(1) == 0) {
-                    Logger.error("Invitee email not found in the database: " + email);
-                    sendResponse(new ServerResponse(false, "Error: Invitee email not found", null));
-                    return;
-                }
-                Logger.info("Invitee email found in the database: " + user.getEmail());
-            }
-
-            // Check if the group exists
-            try (PreparedStatement checkGroupStmt = conn.prepareStatement(checkGroupSQL)) {
-                checkGroupStmt.setInt(1, group.getId());
-                ResultSet rs = checkGroupStmt.executeQuery();
-                if (!rs.next() || rs.getInt(1) == 0) {
-                    Logger.error("Group not found in the database: " + group.getName());
-                    sendResponse(new ServerResponse(false, "Error: Group not found", null));
-                    return;
-                }
-                Logger.info("Group found in the database: " + group.getName());
-            }
-
-            //Get invitee user
-            String getUserSQL = "SELECT id FROM users WHERE email = ?";
-            int inviteeId = 0;
-            try (PreparedStatement getUserStmt = conn.prepareStatement(getUserSQL)) {
-                getUserStmt.setString(1, email);
-                ResultSet rs = getUserStmt.executeQuery();
-                if (rs.next()) {
-                    inviteeId = rs.getInt("id");
-                    Logger.info("User found in the database: " + email);
-                } else {
-                    Logger.error("User not found in the database: " + email);
-                    sendResponse(new ServerResponse(false, "Error: User not found", null));
-                    return;
-                }
-            }
-
-            // Check if the invitee is already a member of the group
-            String checkUserGroupSQL = "SELECT COUNT(*) FROM users_groups WHERE user_id = ? AND group_id = ?";
-            try (PreparedStatement checkUserGroupStmt = conn.prepareStatement(checkUserGroupSQL)) {
-                checkUserGroupStmt.setInt(1, inviteeId);
-                checkUserGroupStmt.setInt(2, group.getId());
-                ResultSet rs = checkUserGroupStmt.executeQuery();
-                if (rs.next() && rs.getInt(1) > 0) {
-                    Logger.error("User is already a member of the group: " + group.getName());
-                    sendResponse(new ServerResponse(false, "Error: User is already a member of the group", null));
-                    return;
-                }
-                Logger.info("User is not a member of the group: " + user.getName());
-            }
-
-            // Insert the invite
-            try (PreparedStatement insertStmt = conn.prepareStatement(insertSQL)) {
-                insertStmt.setInt(1, group.getOwnerId());
-                insertStmt.setInt(2, inviteeId);
-                insertStmt.setInt(3, user.getId());
-                insertStmt.executeUpdate();
-                updateVersion();
-                insertSQL = "INSERT INTO group_invites (group_id, invited_user, invited_by, status) VALUES (" + group.getOwnerId() + ", " + inviteeId + ", " + user.getId() + ", 'pending')";
-                sendHeartbeat(insertSQL, getVersion());
-                Logger.info("Invite sent successfully");
-                sendResponse(new ServerResponse(true, "Invite sent successfully", null));
-            }
-
-
-        } catch (SQLException e) {
-            Logger.error("Database error: " + e.getMessage());
-            sendResponse(new ServerResponse(false, "Error while sending invite", null));
-        }
     }
 
     private void sendResponse(ServerResponse response) {
