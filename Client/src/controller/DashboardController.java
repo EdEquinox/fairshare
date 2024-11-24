@@ -9,7 +9,6 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
-import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
@@ -303,64 +302,61 @@ public class DashboardController implements Initializable {
     }
 
     private void fetchGroups() {
-        new Thread(() -> {
-            if (clientService.isClientConnected()) {
-                ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_GROUPS, currentUser));
-                javafx.application.Platform.runLater(() -> {
-                    if (response.isSuccess()) {
-                        try {
-                            Type groupListType = new TypeToken<List<Group>>() {
-                            }.getType();
-                            List<Group> fetchedGroups = gson.fromJson(gson.toJson(response.payload()), groupListType);
-                            groups.setAll(fetchedGroups);
-                            Logger.info("Groups fetched successfully for user: " + currentUser.getName());
-                        } catch (Exception e) {
-                            Logger.error("Failed to deserialize groups: " + e.getMessage());
-                            AlertUtils.showError("Error", "Invalid server response format.");
-                        }
-                    } else {
-                        AlertUtils.showError("Error", "Failed to fetch groups: " + response.message());
-                        Logger.error("Failed to fetch groups for user: " + currentUser.getName());
+        if (clientService.isClientConnected()) {
+            ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_GROUPS, currentUser));
+            javafx.application.Platform.runLater(() -> {
+                if (response.isSuccess()) {
+                    try {
+                        Type groupListType = new TypeToken<List<Group>>() {
+                        }.getType();
+                        List<Group> fetchedGroups = gson.fromJson(gson.toJson(response.payload()), groupListType);
+                        groups.setAll(fetchedGroups);
+                        Logger.info("Groups fetched successfully for user: " + currentUser.getName());
+                    } catch (Exception e) {
+                        Logger.error("Failed to deserialize groups: " + e.getMessage());
+                        AlertUtils.showError("Error", "Invalid server response format.");
                     }
-                });
-            } else {
-                javafx.application.Platform.runLater(() -> {
-                    AlertUtils.showError("Error", "Client is not connected to the server.");
-                    Logger.error("Client is not connected to the server.");
-                });
-            }
-        }).start();
+                } else {
+                    AlertUtils.showError("Error", "Failed to fetch groups: " + response.message());
+                    Logger.error("Failed to fetch groups for user: " + currentUser.getName());
+                }
+            });
+        } else {
+            javafx.application.Platform.runLater(() -> {
+                AlertUtils.showError("Error", "Client is not connected to the server.");
+                Logger.error("Client is not connected to the server.");
+            });
+        }
     }
 
     private void fetchPayments() {
-        new Thread(() -> {
-            if (clientService.isClientConnected()) {
-                ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_PAYMENTS, selectedGroup.getId()));
+        if (clientService.isClientConnected()) {
+            ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_PAYMENTS, selectedGroup.getId()));
 
-                javafx.application.Platform.runLater(() -> {
-                    if (response.isSuccess()) {
-                        try {
-                            Type paymentListType = new TypeToken<List<Payment>>() {}.getType();
-                            List<Payment> fetchedPayments = gson.fromJson(gson.toJson(response.payload()), paymentListType);
+            javafx.application.Platform.runLater(() -> {
+                if (response.isSuccess()) {
+                    try {
+                        Type paymentListType = new TypeToken<List<Payment>>() {
+                        }.getType();
+                        List<Payment> fetchedPayments = gson.fromJson(gson.toJson(response.payload()), paymentListType);
 
-                            payments.setAll(fetchedPayments);
-                            Logger.info("Payments fetched successfully for group: " + selectedGroup.getName());
-                        } catch (Exception e) {
-                            Logger.error("Failed to parse server response for payments: " + e.getMessage());
-                            AlertUtils.showError("Error", "Failed to parse server response for payments.");
-                        }
-                    } else {
-                        AlertUtils.showError("Error", "Failed to fetch payments: " + response.message());
-                        Logger.error("Failed to fetch payments for group: " + selectedGroup.getName());
+                        payments.setAll(fetchedPayments);
+                        Logger.info("Payments fetched successfully for group: " + selectedGroup.getName());
+                    } catch (Exception e) {
+                        Logger.error("Failed to parse server response for payments: " + e.getMessage());
+                        AlertUtils.showError("Error", "Failed to parse server response for payments.");
                     }
-                });
-            } else {
-                javafx.application.Platform.runLater(() -> {
-                    AlertUtils.showError("Error", "Client is not connected to the server.");
-                    Logger.error("Client is not connected to the server.");
-                });
-            }
-        }).start();
+                } else {
+                    AlertUtils.showError("Error", "Failed to fetch payments: " + response.message());
+                    Logger.error("Failed to fetch payments for group: " + selectedGroup.getName());
+                }
+            });
+        } else {
+            javafx.application.Platform.runLater(() -> {
+                AlertUtils.showError("Error", "Client is not connected to the server.");
+                Logger.error("Client is not connected to the server.");
+            });
+        }
     }
 
     @FXML
@@ -386,85 +382,79 @@ public class DashboardController implements Initializable {
             Logger.error("No group selected for fetching users.");
             return;
         }
+        if (clientService.isClientConnected()) {
+            ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_GROUP_USERS, group));
 
-        new Thread(() -> {
-            if (clientService.isClientConnected()) {
-                ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_GROUP_USERS, group));
+            javafx.application.Platform.runLater(() -> {
+                if (response.isSuccess()) {
+                    try {
+                        Type userListType = new TypeToken<List<User>>() {
+                        }.getType();
+                        List<User> users = gson.fromJson(gson.toJson(response.payload()), userListType);
 
-                javafx.application.Platform.runLater(() -> {
-                    if (response.isSuccess()) {
-                        try {
-                            Type userListType = new TypeToken<List<User>>() {
-                            }.getType();
-                            List<User> users = gson.fromJson(gson.toJson(response.payload()), userListType);
+                        usersInGroup.setAll(users);
+                        userListView.setItems(usersInGroup);
 
-                            usersInGroup.setAll(users);
-                            userListView.setItems(usersInGroup);
-
-                            userListView.setCellFactory(param -> new ListCell<User>() {
-                                @Override
-                                protected void updateItem(User user, boolean empty) {
-                                    super.updateItem(user, empty);
-                                    if (empty || user == null) {
-                                        setText(null);
-                                    } else {
-                                        setText(user.getName());
-                                    }
+                        userListView.setCellFactory(param -> new ListCell<User>() {
+                            @Override
+                            protected void updateItem(User user, boolean empty) {
+                                super.updateItem(user, empty);
+                                if (empty || user == null) {
+                                    setText(null);
+                                } else {
+                                    setText(user.getName());
                                 }
-                            });
+                            }
+                        });
 
-                            Logger.info("Users fetched successfully for group: " + group.getName());
-                        } catch (Exception e) {
-                            Logger.error("Failed to parse server response for users: " + e.getMessage());
-                            AlertUtils.showError("Error", "Failed to parse server response for users.");
-                        }
-                    } else {
-                        AlertUtils.showError("Error", "Failed to fetch users: " + response.message());
-                        Logger.error("Failed to fetch users for group: " + group.getName());
+                        Logger.info("Users fetched successfully for group: " + group.getName());
+                    } catch (Exception e) {
+                        Logger.error("Failed to parse server response for users: " + e.getMessage());
+                        AlertUtils.showError("Error", "Failed to parse server response for users.");
                     }
-                });
-            } else {
-                javafx.application.Platform.runLater(() -> {
-                    AlertUtils.showError("Error", "Client is not connected to the server.");
-                    Logger.error("Client is not connected to the server.");
-                });
-            }
-        }).start();
+                } else {
+                    AlertUtils.showError("Error", "Failed to fetch users: " + response.message());
+                    Logger.error("Failed to fetch users for group: " + group.getName());
+                }
+            });
+        } else {
+            javafx.application.Platform.runLater(() -> {
+                AlertUtils.showError("Error", "Client is not connected to the server.");
+                Logger.error("Client is not connected to the server.");
+            });
+        }
     }
 
 
     private void fetchExpensesForGroup() {
+        if (clientService.isClientConnected()) {
+            ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_EXPENSES, selectedGroup.getId()));
 
-        new Thread(() -> {
-            if (clientService.isClientConnected()) {
-                ServerResponse response = clientService.sendRequest(new Message(Message.Type.GET_EXPENSES, selectedGroup.getId()));
+            javafx.application.Platform.runLater(() -> {
+                if (response.isSuccess()) {
+                    try {
+                        Type expenseListType = new TypeToken<List<Expense>>() {
+                        }.getType();
+                        List<Expense> fetchedExpenses = gson.fromJson(gson.toJson(response.payload()), expenseListType);
 
-                javafx.application.Platform.runLater(() -> {
-                    if (response.isSuccess()) {
-                        try {
-                            Type expenseListType = new TypeToken<List<Expense>>() {
-                            }.getType();
-                            List<Expense> fetchedExpenses = gson.fromJson(gson.toJson(response.payload()), expenseListType);
+                        expenses.setAll(fetchedExpenses);
 
-                            expenses.setAll(fetchedExpenses);
-
-                            Logger.info("Expenses fetched successfully for group: " + selectedGroup.getName());
-                        } catch (Exception e) {
-                            Logger.error("Failed to deserialize expenses: " + e.getMessage());
-                            AlertUtils.showError("Error", "Failed to parse server response for expenses.");
-                        }
-                    } else {
-                        expenses.clear();
-                        Logger.info("No expenses found or error occurred for group: " + selectedGroup.getName());
+                        Logger.info("Expenses fetched successfully for group: " + selectedGroup.getName());
+                    } catch (Exception e) {
+                        Logger.error("Failed to deserialize expenses: " + e.getMessage());
+                        AlertUtils.showError("Error", "Failed to parse server response for expenses.");
                     }
-                });
-            } else {
-                javafx.application.Platform.runLater(() -> {
-                    AlertUtils.showError("Error", "Client is not connected to the server.");
-                    Logger.error("Client is not connected to the server.");
-                });
-            }
-        }).start();
+                } else {
+                    expenses.clear();
+                    Logger.info("No expenses found or error occurred for group: " + selectedGroup.getName());
+                }
+            });
+        } else {
+            javafx.application.Platform.runLater(() -> {
+                AlertUtils.showError("Error", "Client is not connected to the server.");
+                Logger.error("Client is not connected to the server.");
+            });
+        }
     }
 
     @FXML
