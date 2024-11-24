@@ -9,10 +9,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.*;
 
 public class ClientHandler implements Runnable {
     private final Socket clientSocket;
@@ -112,6 +109,18 @@ public class ClientHandler implements Runnable {
                             User user = gson.fromJson(gson.toJson(message.payload()), User.class);
                             handleGetGroups(user);
                         }
+                        case Message.Type.GET_GROUP_STATS -> {
+                            try {
+                                Map<String, Number> payload = gson.fromJson(gson.toJson(message.payload()), new TypeToken<Map<String, Number>>() {
+                                }.getType());
+                                int groupId = payload.get("groupId").intValue(); // Garantindo que seja convertido para int
+                                int userId = payload.get("userId").intValue();
+                                handleGetGroupStats(groupId, userId);
+                            } catch (Exception e) {
+                                Logger.error("Error deserializing GET_GROUP_STATS payload: " + e.getMessage());
+                                sendResponse(new ServerResponse(false, "Invalid payload format for GET_GROUP_STATS.", null));
+                            }
+                        }
                         case Message.Type.GET_GROUP_USERS -> {
                             Group group = gson.fromJson(gson.toJson(message.payload()), Group.class); // Deserialize Group object
                             handleGetGroupUsers(group);
@@ -186,6 +195,139 @@ public class ClientHandler implements Runnable {
 
     }
 
+    private void handleGetGroupStats(int groupId, int userId) {
+        String totalSpentSql = """
+            SELECT IFNULL(SUM(amount), 0) AS totalSpent
+            FROM expenses
+            WHERE group_id = ?;
+        """;
+
+        String totalToPaySql = """
+            SELECT IFNULL(SUM(amount / (
+                SELECT COUNT(*)
+                FROM users_groups
+                WHERE group_id = expenses.group_id AND user_id IN (SELECT value FROM json_each(expenses.shared_with))
+            )), 0) AS totalToPay
+            FROM expenses
+            WHERE group_id = ? AND ? IN (SELECT value FROM json_each(shared_with));
+        """;
+
+        String totalToReceiveSql = """
+            SELECT IFNULL(SUM(amount), 0) AS totalToReceive
+            FROM payments
+            WHERE group_id = ? AND to_user_id = ?;
+        """;
+
+        String fetchExpensesSql = """
+            SELECT e.id, e.group_id, e.added_by, e.paid_by, e.amount, e.description, e.date, e.shared_with,
+                   u1.name AS paid_by_name
+            FROM expenses e
+            INNER JOIN users u1 ON e.paid_by = u1.id
+            WHERE e.group_id = ?;
+        """;
+
+        String fetchPaymentsSql = """
+            SELECT p.id, p.group_id, p.from_user_id, p.to_user_id, p.amount, p.date,
+                   u1.name AS paid_by_name, u2.name AS received_by_name
+            FROM payments p
+            INNER JOIN users u1 ON p.from_user_id = u1.id
+            INNER JOIN users u2 ON p.to_user_id = u2.id
+            WHERE p.group_id = ?;
+        """;
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath)) {
+            double totalSpent = 0;
+            double totalToPay = 0;
+            double totalToReceive = 0;
+            List<Expense> expenses = new ArrayList<>();
+            List<Payment> payments = new ArrayList<>();
+
+            // Calculate total spent
+            try (PreparedStatement statement = connection.prepareStatement(totalSpentSql)) {
+                statement.setInt(1, groupId);
+                ResultSet resultSet = statement.executeQuery();
+                if (resultSet.next()) {
+                    totalSpent = resultSet.getDouble("totalSpent");
+                }
+            }
+
+            // Calculate total to pay
+            try (PreparedStatement statement = connection.prepareStatement(totalToPaySql)) {
+                statement.setInt(1, groupId);
+                statement.setInt(2, userId);
+                ResultSet resultSet = statement.executeQuery();
+                if (resultSet.next()) {
+                    totalToPay = resultSet.getDouble("totalToPay");
+                }
+            }
+
+            // Calculate total to receive
+            try (PreparedStatement statement = connection.prepareStatement(totalToReceiveSql)) {
+                statement.setInt(1, groupId);
+                statement.setInt(2, userId);
+                ResultSet resultSet = statement.executeQuery();
+                if (resultSet.next()) {
+                    totalToReceive = resultSet.getDouble("totalToReceive");
+                }
+            }
+
+            // Fetch expenses
+            try (PreparedStatement statement = connection.prepareStatement(fetchExpensesSql)) {
+                statement.setInt(1, groupId);
+                ResultSet resultSet = statement.executeQuery();
+                while (resultSet.next()) {
+                    Expense expense = new Expense(
+                            resultSet.getInt("id"),
+                            resultSet.getInt("group_id"),
+                            resultSet.getInt("paid_by"),
+                            resultSet.getInt("added_by"),
+                            resultSet.getDouble("amount"),
+                            resultSet.getString("description"),
+                            resultSet.getString("date"),
+                            gson.fromJson(resultSet.getString("shared_with"), new TypeToken<List<Integer>>() {}.getType())
+                    );
+                    expense.setPaidByName(resultSet.getString("paid_by_name")); // Nome do pagador
+                    expenses.add(expense);
+                }
+            }
+
+            // Fetch payments
+            try (PreparedStatement statement = connection.prepareStatement(fetchPaymentsSql)) {
+                statement.setInt(1, groupId);
+                ResultSet resultSet = statement.executeQuery();
+                while (resultSet.next()) {
+                    Payment payment = new Payment(
+                            resultSet.getInt("id"),
+                            resultSet.getInt("group_id"),
+                            resultSet.getInt("from_user_id"),
+                            resultSet.getInt("to_user_id"),
+                            resultSet.getDouble("amount"),
+                            resultSet.getString("date")
+                    );
+                    payment.setPaidByName(resultSet.getString("paid_by_name")); // Nome do pagador
+                    payment.setReceivedByName(resultSet.getString("received_by_name")); // Nome do destinatário
+                    payments.add(payment);
+                }
+            }
+
+            // Send response
+            Map<String, Object> stats = new HashMap<>();
+            stats.put("totalSpent", totalSpent);
+            stats.put("totalToPay", totalToPay);
+            stats.put("totalToReceive", totalToReceive);
+            stats.put("expenses", expenses);
+            stats.put("payments", payments);
+
+            sendResponse(new ServerResponse(true, "Group stats fetched successfully.", stats));
+
+        } catch (SQLException e) {
+            Logger.error("Database error while fetching group stats: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        } catch (Exception e) {
+            Logger.error("Error processing group stats: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Error processing group stats: " + e.getMessage(), null));
+        }
+    }
 
     private void handleCreateInvite(Invite invite) {
         String getUserIdSql = "SELECT id FROM users WHERE email = ?";
@@ -354,9 +496,7 @@ public class ClientHandler implements Runnable {
 
         String fetchPaidByNameSql = "SELECT name FROM users WHERE id = ?;";
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement insertStatement = connection.prepareStatement(insertSql);
-             PreparedStatement fetchPaidByNameStatement = connection.prepareStatement(fetchPaidByNameSql)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement insertStatement = connection.prepareStatement(insertSql); PreparedStatement fetchPaidByNameStatement = connection.prepareStatement(fetchPaidByNameSql)) {
 
             if (!groupExists(connection, expense.getGroupId())) {
                 Logger.error("Group does not exist. ID: " + expense.getGroupId());
@@ -419,16 +559,15 @@ public class ClientHandler implements Runnable {
         }
 
         String expenseSql = """
-        SELECT e.id, e.group_id, e.added_by, e.paid_by, e.amount, e.description, e.date, e.shared_with,
-               u1.name AS added_by_name, u2.name AS paid_by_name
-        FROM expenses e
-        INNER JOIN users u1 ON e.added_by = u1.id
-        INNER JOIN users u2 ON e.paid_by = u2.id
-        WHERE e.group_id = ?;
-    """;
+                    SELECT e.id, e.group_id, e.added_by, e.paid_by, e.amount, e.description, e.date, e.shared_with,
+                           u1.name AS added_by_name, u2.name AS paid_by_name
+                    FROM expenses e
+                    INNER JOIN users u1 ON e.added_by = u1.id
+                    INNER JOIN users u2 ON e.paid_by = u2.id
+                    WHERE e.group_id = ?;
+                """;
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement statement = connection.prepareStatement(expenseSql)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(expenseSql)) {
 
             statement.setInt(1, groupId);
             ResultSet resultSet = statement.executeQuery();
@@ -447,14 +586,13 @@ public class ClientHandler implements Runnable {
                 String paidByName = resultSet.getString("paid_by_name");
 
                 // Convert sharedWith JSON array to List<Integer>
-                List<Integer> sharedWithIds = gson.fromJson(sharedWithJson, new TypeToken<List<Integer>>() {}.getType());
+                List<Integer> sharedWithIds = gson.fromJson(sharedWithJson, new TypeToken<List<Integer>>() {
+                }.getType());
 
                 // Fetch names of sharedWith users
                 String sharedWithNames = fetchSharedWithNames(sharedWithIds, connection);
 
-                expenses.add(new Expense(
-                        id, group_id, addedBy, paidBy, amount, description, date, sharedWithIds,
-                        addedByName, paidByName, sharedWithNames));
+                expenses.add(new Expense(id, group_id, addedBy, paidBy, amount, description, date, sharedWithIds, addedByName, paidByName, sharedWithNames));
             }
 
             sendResponse(new ServerResponse(true, "Expenses fetched successfully.", expenses));
@@ -527,8 +665,7 @@ public class ClientHandler implements Runnable {
         WHERE id = ?;
         """;
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(sql)) {
 
             statement.setInt(1, expense.getPaidBy());
             statement.setDouble(2, expense.getAmount());
@@ -608,12 +745,11 @@ public class ClientHandler implements Runnable {
         }
 
         String insertSql = """
-        INSERT INTO payments (group_id, from_user_id, to_user_id, amount, date)
-        VALUES (?, ?, ?, ?, ?);
-    """;
+                    INSERT INTO payments (group_id, from_user_id, to_user_id, amount, date)
+                    VALUES (?, ?, ?, ?, ?);
+                """;
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement insertStatement = connection.prepareStatement(insertSql)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement insertStatement = connection.prepareStatement(insertSql)) {
 
             // Add the new payment to the database
             insertStatement.setInt(1, payment.getGroupId());
@@ -670,13 +806,12 @@ public class ClientHandler implements Runnable {
         }
 
         String sql = """
-        UPDATE payments
-        SET date = ?, amount = ?, from_user_id = ?, to_user_id = ?
-        WHERE id = ?;
-    """;
+                    UPDATE payments
+                    SET date = ?, amount = ?, from_user_id = ?, to_user_id = ?
+                    WHERE id = ?;
+                """;
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(sql)) {
 
             // Update payment data in the database
             statement.setString(1, payment.getDate());
@@ -726,8 +861,7 @@ public class ClientHandler implements Runnable {
 
         String sql = "DELETE FROM payments WHERE id = ?";
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(sql)) {
 
             statement.setInt(1, paymentId);
 
@@ -765,16 +899,15 @@ public class ClientHandler implements Runnable {
         }
 
         String sql = """
-        SELECT p.id, p.group_id, p.from_user_id, p.to_user_id, p.amount, p.date,
-               u1.name AS paid_by_name, u2.name AS received_by_name
-        FROM payments p
-        INNER JOIN users u1 ON p.from_user_id = u1.id
-        INNER JOIN users u2 ON p.to_user_id = u2.id
-        WHERE p.group_id = ?;
-    """;
+                    SELECT p.id, p.group_id, p.from_user_id, p.to_user_id, p.amount, p.date,
+                           u1.name AS paid_by_name, u2.name AS received_by_name
+                    FROM payments p
+                    INNER JOIN users u1 ON p.from_user_id = u1.id
+                    INNER JOIN users u2 ON p.to_user_id = u2.id
+                    WHERE p.group_id = ?;
+                """;
 
-        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(sql)) {
 
             statement.setInt(1, groupId);
             ResultSet resultSet = statement.executeQuery();
