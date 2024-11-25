@@ -230,7 +230,7 @@ public class ServerService {
 
                 while (true) {
                     int currentVersion = getVersion(); // Fetch the current version dynamically
-                    String message = "HEARTBEAT, version" + currentVersion + ", port " + tcpPort;
+                    String message = "HEARTBEAT, version " + currentVersion + ", port " + tcpPort;
                     ServerResponse response = new ServerResponse(true, message, null);
                     byte[] data = gson.toJson(response).getBytes();
 
