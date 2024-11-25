@@ -7,10 +7,9 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" exported="" name="javafx-swt" level="project" />
-    <orderEntry type="module" module-name="Client" exported="" />
-    <orderEntry type="library" exported="" name="gson-2.10.1" level="project" />
-    <orderEntry type="library" exported="" name="sqlite-jdbc-3.47.0.0" level="project" />
-    <orderEntry type="module" module-name="Shared" />
+    <orderEntry type="module" module-name="Shared" exported="" />
+    <orderEntry type="library" exported="" name="lib1" level="project" />
+    <orderEntry type="library" exported="" name="gson-2.10.2" level="project" />
+    <orderEntry type="library" exported="" name="javafx-swt1" level="project" />
   </component>
 </module>
