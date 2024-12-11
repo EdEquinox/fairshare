@@ -19,6 +19,7 @@ public class ServerService {
     private final int version = 1;
     private final Gson gson = new Gson();
 
+
     public ServerService(String databasePath, ServerSocket serverSocket) {
         this.databasePath = databasePath;
         this.serverSocket = serverSocket;
@@ -31,7 +32,7 @@ public class ServerService {
     /**
      * Starts the server and listens for incoming client connections.
      */
-    public void startServer() throws IOException {
+    public void startServer(ServerRmiService serverRMI) throws IOException {
         Logger.info("Starting server with database path: " + databasePath);
 
         // Check if the database file already exists
@@ -52,7 +53,7 @@ public class ServerService {
             Socket clientSocket = serverSocket.accept();
             Logger.info("Client connected: " + clientSocket.getInetAddress().getHostAddress());
 
-            ClientHandler clientHandler = new ClientHandler(clientSocket, databasePath);
+            ClientHandler clientHandler = new ClientHandler(clientSocket, databasePath, serverRMI);
             new Thread(clientHandler).start();
 
         }

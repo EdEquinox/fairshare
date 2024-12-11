@@ -20,10 +20,12 @@ public class ClientHandler implements Runnable {
     private final static String MULTICAST_ADDRESS = "230.44.44.44";
     private final static int MULTICAST_PORT = 4444;
     private int version;
+    ServerRmiService serverRmiService;
 
-    public ClientHandler(Socket clientSocket, String databasePath) {
+    public ClientHandler(Socket clientSocket, String databasePath , ServerRmiService serverRmiService) {
         this.clientSocket = clientSocket;
         this.databasePath = databasePath;
+        this.serverRmiService = serverRmiService;
         this.version = 1;
     }
 
@@ -129,6 +131,14 @@ public class ClientHandler implements Runnable {
                             int expenseId = gson.fromJson(gson.toJson(message.payload()), Integer.class);
                             handleDeleteExpense(expenseId);
                         }
+                        case Message.Type.GET_USERS_RMI -> {
+                            Logger.info("Fetching users...");
+                            handleGetUsers();
+                        }
+                        case Message.Type.GET_GROUPS_RMI -> {
+                            Logger.info("Fetching groups...");
+                            handleGetGroupsRmi();
+                        }
 
                         default -> sendResponse(new ServerResponse(false, "Invalid command", null));
                     }
@@ -149,6 +159,47 @@ public class ClientHandler implements Runnable {
             } catch (IOException e) {
                 Logger.error("Error closing client connection: " + e.getMessage());
             }
+        }
+    }
+
+    private void handleGetGroupsRmi() {
+        List<String> groups = new ArrayList<>();
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); Statement statement = connection.createStatement()) {
+            ResultSet resultSet = statement.executeQuery("SELECT name FROM groups");
+            while (resultSet.next()) {
+                groups.add(resultSet.getString("name"));
+            }
+            sendResponse(new ServerResponse(true, "Groups retrieved successfully.", groups));
+        } catch (SQLException e) {
+            Logger.error("Database error while retrieving groups: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
+        }
+    }
+
+    private void handleGetUsers() {
+        String sql = "SELECT id, name, email, phone FROM users";
+
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath); PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            ResultSet resultSet = statement.executeQuery();
+            List<User> users = new ArrayList<>();
+
+            while (resultSet.next()) {
+                User user = new User(resultSet.getInt("id"), resultSet.getString("name"), resultSet.getString("email"), resultSet.getString("phone"), null // Senha não é necessária aqui
+                );
+                users.add(user);
+            }
+
+            List<String> usersList = new ArrayList<>();
+            for (User user : users) {
+                usersList.add(user.getName());
+            }
+
+            sendResponse(new ServerResponse(true, "Users retrieved successfully.", usersList));
+
+        } catch (SQLException e) {
+            Logger.error("Database error while retrieving users: " + e.getMessage());
+            sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
         }
     }
 
@@ -308,13 +359,14 @@ public class ClientHandler implements Runnable {
             int rowsAffected = statement.executeUpdate();
             if (rowsAffected > 0) {
                 Logger.info("Expense added successfully: " + expense);
+                serverRmiService.addExpense("despesa", expense.getAmount());
                 sendResponse(new ServerResponse(true, "Expense added successfully.", null));
             } else {
                 Logger.error("Failed to add expense: " + expense);
                 sendResponse(new ServerResponse(false, "Failed to add expense.", null));
             }
 
-        } catch (SQLException e) {
+        } catch (Exception e) {
             Logger.error("Database error while adding expense: " + e.getMessage());
             sendResponse(new ServerResponse(false, "Database error: " + e.getMessage(), null));
         }
@@ -377,9 +429,10 @@ public class ClientHandler implements Runnable {
 
             isSuccess = true;
             message = "Expense deleted successfully.";
+            serverRmiService.removeExpense(expenseId);
             Logger.info("Expense deleted from the database. ID: " + expenseId);
 
-        } catch (SQLException e) {
+        } catch (Exception e) {
             message = "Failed to delete expense.";
             Logger.error("Database error while deleting expense: " + e.getMessage());
         }
@@ -806,6 +859,7 @@ public class ClientHandler implements Runnable {
                 sendHeartbeat(insertSQL, getVersion());
                 isSuccess = true;
                 message = "User registered successfully";
+                serverRmiService.registerUser(user.getEmail());
                 Logger.info("User added successfully to the database: " + user.getName());
             }
 
@@ -846,6 +900,7 @@ public class ClientHandler implements Runnable {
                     isSuccess = true;
                     authenticatedUser = new User(rs.getInt("id"), rs.getString("name"), rs.getString("email"), rs.getString("phone"));
                     Logger.info("User authenticated successfully: " + authenticatedUser.getEmail());
+                    serverRmiService.loggedInUser(user.getEmail());
                     message = "User authenticated successfully";
                 } else {
                     Logger.error("Authentication failed for email: " + user.getEmail());

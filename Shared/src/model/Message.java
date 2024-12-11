@@ -9,7 +9,8 @@ public record Message(model.Message.Type type, Object payload) {
         CREATE_GROUP, GET_GROUPS, GET_GROUP_USERS, GET_GROUP_NAME, EDIT_GROUP, REMOVE_GROUP, // Groups
         ADD_EXPENSE, EDIT_EXPENSE, DELETE_EXPENSE, GET_EXPENSES, // Expenses
         ADD_PAYMENT, // Payments
-        STOP_BACKUP, UPDATE_BACKUP, BACKUP_INIT, HEARTBEAT // Server Backup
+        STOP_BACKUP, UPDATE_BACKUP, BACKUP_INIT, HEARTBEAT, // Server Backup
+        GET_USERS_RMI, GET_GROUPS_RMI // Server Management
     }
 
     @Override

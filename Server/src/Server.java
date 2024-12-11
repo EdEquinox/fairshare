@@ -1,6 +1,9 @@
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.rmi.AlreadyBoundException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import utils.Logger;
@@ -26,9 +29,15 @@ public class Server {
             Logger.info("Database path: " + dbPath);
             Logger.info("Server running on ip: " + serverSocket.getInetAddress().getHostAddress());
 
+            // Initialize RMI service
+            ServerRmiService serverRmiService = new ServerRmiService("localhost", port);
+            Registry registry = LocateRegistry.createRegistry(1099);
+            registry.bind("Server", serverRmiService);
+            Logger.info("RMI service started.");
+
             // Initialize ServerService to handle database setup
             ServerService serverService = new ServerService(dbPath, serverSocket);
-            serverService.startServer();  // This will initialize the database if it doesn’t exist
+            serverService.startServer(serverRmiService);  // This will initialize the database if it doesn’t exist
 
             Logger.info("Server is ready to accept client connections.");
 
@@ -40,12 +49,12 @@ public class Server {
                     Logger.info("New client connected: " + clientSocket.getInetAddress());
 
                     // Use the thread pool to handle the client connection
-                    threadPool.execute(new ClientHandler(clientSocket, dbPath));
+                    threadPool.execute(new ClientHandler(clientSocket, dbPath, serverRmiService));
                 } catch (IOException e) {
                     Logger.error("Error accepting client connection: " + e.getMessage());
                 }
             }
-        } catch (IOException e) {
+        } catch (IOException | AlreadyBoundException e) {
             Logger.error("Error starting server: " + e.getMessage());
             System.exit(1);
         } finally {
