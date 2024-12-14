@@ -29,8 +29,6 @@ public class ClientHandler implements Runnable {
         this.version = 1;
     }
 
-
-
     @Override
     public void run() {
 

@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.*;
 import java.sql.*;
+import java.util.List;
 
 public class ServerService {
     private final String databasePath;
@@ -15,6 +16,7 @@ public class ServerService {
     private final int heartbeatInterval = 10000;
     private int version = 1;
     private final Gson gson = new Gson();
+    private ServerRmiService serverRmiService;
 
 
     public ServerService(String databasePath, ServerSocket serverSocket) {
@@ -29,7 +31,7 @@ public class ServerService {
     /**
      * Starts the server and listens for incoming client connections.
      */
-    public void startServer(ServerRmiService serverRMI) throws IOException {
+    public void startServer() throws IOException {
         Logger.info("Starting server with database path: " + databasePath);
 
         // Check if the database file already exists
@@ -50,9 +52,8 @@ public class ServerService {
             Socket clientSocket = serverSocket.accept();
             Logger.info("Client connected: " + clientSocket.getInetAddress().getHostAddress());
 
-            ClientHandler clientHandler = new ClientHandler(clientSocket, databasePath, serverRMI);
+            ClientHandler clientHandler = new ClientHandler(clientSocket, databasePath, serverRmiService);
             new Thread(clientHandler).start();
-
         }
     }
 
@@ -186,7 +187,43 @@ public class ServerService {
         }
     }
 
+    public List<String> getUsers() {
+        String query = "SELECT name FROM users";
+        List<String> users = new java.util.ArrayList<>(List.of());
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement preparedStatement = connection.prepareStatement(query)) {
+            ResultSet resultSet = preparedStatement.executeQuery();
+            while (resultSet.next()) {
+                String name;
+                name = resultSet.getString("name");
+                Logger.info("User: " + resultSet.getString("name"));
+                users.add(name);
+            }
+            Logger.info("Users fetched successfully.");
+            return users;
+        } catch (Exception e) {
+            Logger.error("Error fetching users: " + e.getMessage());
+        }
+        return List.of();
+    }
 
+    public List<String> getGroups() {
+        String query = "SELECT name FROM groups";
+        List<String> groups = new java.util.ArrayList<>(List.of());
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+             PreparedStatement preparedStatement = connection.prepareStatement(query)) {
+            ResultSet resultSet = preparedStatement.executeQuery();
+            while (resultSet.next()) {
+                groups.add(resultSet.getString("name"));
+                Logger.info("Group: " + resultSet.getString("name"));
+            }
+            Logger.info("Groups fetched successfully.");
+            return groups;
+        } catch (Exception e) {
+            Logger.error("Error fetching groups: " + e.getMessage());
+        }
+        return List.of();
+    }
 
     private int getVersion() {
         String query = "SELECT version FROM version";
@@ -215,6 +252,10 @@ public class ServerService {
         } catch (IOException e) {
             Logger.error("Error stopping server: " + e.getMessage());
         }
+    }
+
+    public void setServerRmiService(ServerRmiService serverRmiService) {
+        this.serverRmiService = serverRmiService;
     }
 
     private class HeartbeatSender implements Runnable {

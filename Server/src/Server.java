@@ -2,6 +2,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.rmi.AlreadyBoundException;
 import java.rmi.registry.LocateRegistry;
@@ -33,14 +34,18 @@ public class Server {
             Logger.info("Server running on IP: " + serverSocket.getInetAddress().getHostAddress());
 
             // Initialize RMI service
-            ServerRmiService serverRmiService = new ServerRmiService("localhost", port);
+            ServerRmiService serverRmiService = new ServerRmiService();
             Registry registry = LocateRegistry.createRegistry(1099);
             registry.bind("Server", serverRmiService);
             Logger.info("RMI service started.");
 
             // Initialize ServerService to handle database setup
             ServerService serverService = new ServerService(dbPath, serverSocket);
-            serverService.startServer(serverRmiService);  // This will initialize the database if it doesn’t exist
+            serverRmiService.setServerService(serverService);
+            serverService.setServerRmiService(serverRmiService);
+            serverService.startServer();  // This will initialize the database if it doesn’t exist
+
+
 
             Logger.info("Server is ready to accept client connections.");
 

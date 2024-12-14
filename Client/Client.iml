@@ -11,5 +11,8 @@
     <orderEntry type="library" exported="" name="lib1" level="project" />
     <orderEntry type="library" exported="" name="gson-2.10.2" level="project" />
     <orderEntry type="library" exported="" name="javafx-swt1" level="project" />
+    <orderEntry type="library" exported="" name="gson-2.10.1" level="application" />
+    <orderEntry type="library" exported="" name="javafx-swt" level="application" />
+    <orderEntry type="library" exported="" name="sqlite-jdbc-3.47.0.0" level="application" />
   </component>
 </module>

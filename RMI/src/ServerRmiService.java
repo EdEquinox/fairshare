@@ -6,10 +6,10 @@ import java.util.List;
 public class ServerRmiService extends UnicastRemoteObject implements IServerRmiService {
 
     private List<IClientRmiService> clients;
+    ServerService serverService;
 
-    public ServerRmiService(String serverIp, int serverPort) throws RemoteException {
+    public ServerRmiService() throws RemoteException {
         clients = new ArrayList<>();
-
     }
 
     @Override
@@ -29,6 +29,16 @@ public class ServerRmiService extends UnicastRemoteObject implements IServerRmiS
         }
     }
 
+    @Override
+    public List<String> listUsers() throws RemoteException {
+        return serverService.getUsers();
+    }
+
+    @Override
+    public List<String> listGroups() throws RemoteException {
+        return serverService.getGroups();
+    }
+
     public void registerUser(String user) throws RemoteException {
         notifyEvent("New register user: " + user);
     }
@@ -43,5 +53,9 @@ public class ServerRmiService extends UnicastRemoteObject implements IServerRmiS
 
     public void removeExpense(int expense) throws RemoteException {
         notifyEvent("Removed expense: " + expense);
+    }
+
+    public void setServerService(ServerService serverService) {
+        this.serverService = serverService;
     }
 }
