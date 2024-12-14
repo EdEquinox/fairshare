@@ -4,7 +4,10 @@
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.text.Text?>
 
-<BorderPane xmlns:fx="http://javafx.com/fxml/1" fx:controller="controller.DashboardController">
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="controller.DashboardController">
+
     <!-- Sidebar -->
     <left>
         <ScrollPane fitToWidth="true" fitToHeight="true">
@@ -13,34 +16,105 @@
                       style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #FFFFFF;"/>
                 <Button text="Edit Profile" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
                         onAction="#handleEditProfile"/>
-                <Button text="Logout" style="-fx-background-color: #FF5722; -fx-text-fill: #FFFFFF;"
+                <Button text="Group Invites" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
+                        onAction="#handleGroupInvites"/>
+                <Button text="Logout" style="-fx-background-color: red; -fx-text-fill: #FFFFFF;"
                         onAction="#handleLogout"/>
                 <Separator style="-fx-background-color: #555555;"/>
 
-                <Text text="Group Section" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #FFFFFF;"/>
+                <Text fx:id="groupText" text="Group Section" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #FFFFFF;"/>
                 <Button text="Add New Group" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
-                        onAction="#handleAddNewGroup"/>
+                        onAction="#handleNewGroup"/>
                 <ListView fx:id="groupList" VBox.vgrow="ALWAYS"
-                          style="-fx-background-color: #333333; -fx-text-fill: #FFFFFF; -fx-border-color: #444444;"/>
-                <Separator style="-fx-background-color: #555555;"/>
-
-                <Text text="Current Group" style="-fx-font-size: 16; -fx-font-weight: bold; -fx-fill: #FFFFFF;"/>
-                <Button text="Group Invites" style="-fx-background-color: #444444; -fx-text-fill: #FFFFFF;"
-                        onAction="#handleGroupInvites"/>
+                          style="-fx-background-color: #333333; -fx-text-fill: #FFFFFF; -fx-border-color: #444444;" />
             </VBox>
         </ScrollPane>
     </left>
 
     <!-- Main Content -->
     <center>
-        <StackPane fx:id="mainContent" style="-fx-padding: 15;">
-            <Text text="Welcome to the Dashboard" style="-fx-font-size: 20; -fx-font-weight: bold; -fx-fill: #000000;"/>
-        </StackPane>
+        <VBox fx:id="mainContent" spacing="10" style="-fx-padding: 15;" VBox.vgrow="ALWAYS" visible="false" managed="false">
+
+            <!-- Small Users List and Group Summary -->
+            <HBox spacing="10" VBox.vgrow="NEVER" alignment="CENTER">
+                <VBox spacing="5" prefWidth="150" alignment="CENTER">
+                    <Label text="Users in Group"
+                           style="-fx-font-size: 16; -fx-font-weight: bold;"
+                           textAlignment="CENTER"/>
+                    <ListView fx:id="userListView"
+                              style="-fx-background-color: #ffffff;"
+                              prefHeight="200" VBox.vgrow="NEVER"/>
+                </VBox>
+
+                <VBox spacing="5" HBox.hgrow="ALWAYS" alignment="CENTER">
+                    <Label text="Group Summary"
+                           style="-fx-font-size: 16; -fx-font-weight: bold;"
+                           textAlignment="CENTER"/>
+                    <Label fx:id="totalSpentLabel" text="Total Spent: $0"
+                           style="-fx-font-size: 14;"
+                           textAlignment="CENTER"/>
+                </VBox>
+
+                <VBox spacing="5" HBox.hgrow="ALWAYS" alignment="CENTER">
+                    <Label fx:id="amountToPayLabel" text="Total to Pay: $0"
+                           style="-fx-font-size: 14;"
+                           textAlignment="CENTER"/>
+                    <ListView fx:id="payListView"
+                              style="-fx-background-color: #ffffff;"
+                              prefHeight="100"/>
+                </VBox>
+
+                <VBox spacing="5" HBox.hgrow="ALWAYS" alignment="CENTER">
+                    <Label fx:id="amountToReceiveLabel" text="Total to Receive: $0"
+                           style="-fx-font-size: 14;"
+                           textAlignment="CENTER"/>
+                    <ListView fx:id="receiveListView"
+                              style="-fx-background-color: #ffffff;"
+                              prefHeight="100"/>
+                </VBox>
+            </HBox>
+
+            <!-- Expenses and Payments Lists -->
+            <HBox spacing="10" VBox.vgrow="ALWAYS" alignment="CENTER">
+                <!-- Expenses Section -->
+                <VBox spacing="5" alignment="CENTER" VBox.vgrow="ALWAYS" HBox.hgrow="ALWAYS">
+                    <Label text="Expenses"
+                           style="-fx-font-size: 16; -fx-font-weight: bold;"
+                           textAlignment="CENTER"/>
+                    <TableView fx:id="expensesTableView" VBox.vgrow="ALWAYS">
+                        <columns>
+                            <TableColumn text="Date" fx:id="expensesDateColumn" prefWidth="80"/>
+                            <TableColumn text="Description" fx:id="expensesDescriptionColumn" prefWidth="150"/>
+                            <TableColumn text="Value" fx:id="expensesValueColumn" prefWidth="70"/>
+                            <TableColumn text="Paid By" fx:id="expensesPaidByColumn" prefWidth="100"/>
+                            <TableColumn text="Shared With" fx:id="expensesSharedWithColumn" prefWidth="120"/>
+                        </columns>
+                    </TableView>
+                </VBox>
+
+                <!-- Payments Section -->
+                <VBox spacing="5" alignment="CENTER" VBox.vgrow="ALWAYS" HBox.hgrow="ALWAYS">
+                    <Label text="Payments"
+                           style="-fx-font-size: 16; -fx-font-weight: bold;"
+                           textAlignment="CENTER"/>
+                    <TableView fx:id="paymentsTableView" VBox.vgrow="ALWAYS">
+                        <columns>
+                            <TableColumn text="Paid By" fx:id="paymentsPaidByColumn" prefWidth="100"/>
+                            <TableColumn text="Received By" fx:id="paymentsReceivedByColumn" prefWidth="100"/>
+                            <TableColumn text="Date" fx:id="paymentsDateColumn" prefWidth="80"/>
+                            <TableColumn text="Value" fx:id="paymentsValueColumn" prefWidth="70"/>
+                        </columns>
+                    </TableView>
+                </VBox>
+            </HBox>
+        </VBox>
     </center>
 
     <!-- Footer -->
     <bottom>
-        <Label text="Distributed Programming 2024/25 - Group Dashboard"
-               style="-fx-background-color: #282828; -fx-text-fill: #FFFFFF; -fx-padding: 10;"/>
+        <HBox style="-fx-background-color: #282828; -fx-padding: 10;" alignment="CENTER">
+            <Label text="Distributed Programming 2024/25 - Group Dashboard"
+                   style="-fx-text-fill: #FFFFFF;" textAlignment="CENTER"/>
+        </HBox>
     </bottom>
 </BorderPane>

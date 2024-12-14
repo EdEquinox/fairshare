@@ -29,5 +29,3 @@ bin/
 .DS_Store
 /client.log
 /server.log
-.idea/runConfigurations/Client.xml
-.idea/runConfigurations/Server.xml

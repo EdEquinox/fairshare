@@ -17,13 +17,16 @@
 
         <ComboBox fx:id="groupComboBox" prefHeight="25.0" prefWidth="582.0" />
 
-        <Button onAction="#handleInviteButtonAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #FF9800; -fx-text-fill: white;" text="Invite" />
+        <Button onAction="#handleSendInvite" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #FF9800; -fx-text-fill: white;" text="Invite" />
 
         <Button onAction="#handleBackButtonAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #007BFF; -fx-text-fill: white;" text="Back" />
 
         <VBox alignment="CENTER" spacing="10" style="-fx-padding: 20;">
             <Text style="-fx-font-size: 14; -fx-text-fill: #007BFF;" text="Pendent invites:" />
-            <ListView fx:id="inviteList" />
+            <ListView fx:id="inviteList"/>
+
+            <Button onAction="#handleAcceptButtonAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #28A745; -fx-text-fill: white;" text="Accept" />
+            <Button onAction="#handleDeclineButtonAction" style="-fx-font-size: 16; -fx-padding: 10 20; -fx-background-color: #DC3545; -fx-text-fill: white;" text="Decline" />
 
         </VBox>
 
