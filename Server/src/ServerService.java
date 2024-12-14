@@ -5,18 +5,15 @@ import utils.Logger;
 import java.io.File;
 import java.io.IOException;
 import java.net.*;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.Statement;
-import java.sql.ResultSet;
+import java.sql.*;
 
 public class ServerService {
     private final String databasePath;
     private final ServerSocket serverSocket;
     private final String multicastAddress = "230.44.44.44";
     private final int multicastPort = 4444;
-    private final int heartbeatInterval = 5000;
-    private final int version = 1;
+    private final int heartbeatInterval = 10000;
+    private int version = 1;
     private final Gson gson = new Gson();
 
 
@@ -46,7 +43,7 @@ public class ServerService {
         // Confirm that the database path is correctly initialized
         Logger.info("Using database located at: " + new File(databasePath).getAbsolutePath());
 
-        new Thread(new HeartbeatSender(version, serverSocket.getLocalPort())).start();
+        new Thread(new HeartbeatSender(serverSocket.getLocalPort())).start();
 
         // Start listening for client connections
         while (true) {
@@ -190,6 +187,22 @@ public class ServerService {
     }
 
 
+
+    private int getVersion() {
+        String query = "SELECT version FROM version";
+        try(Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath + "/db.db");
+            Statement statement = connection.createStatement();
+            ResultSet resultSet = statement.executeQuery(query);) {
+            version = resultSet.getInt("version");
+            connection.close();
+
+        } catch (Exception e) {
+            Logger.error("Error getting version: " + e.getMessage());
+        }
+        return version;
+    }
+
+
     /**
      * Stops the server and closes the server socket.
      */
@@ -205,11 +218,9 @@ public class ServerService {
     }
 
     private class HeartbeatSender implements Runnable {
-        private final int version;
         private final int tcpPort;
 
-        public HeartbeatSender(int version, int tcpPort) {
-            this.version = version;
+        public HeartbeatSender(int tcpPort) {
             this.tcpPort = tcpPort;
         }
 
@@ -217,18 +228,35 @@ public class ServerService {
         public void run() {
             try (DatagramSocket socket = new DatagramSocket()) {
                 InetAddress group = InetAddress.getByName(multicastAddress);
-                ServerResponse response = new ServerResponse(true, "Heartbeat", null);
-                byte[] data = gson.toJson(response).getBytes();
 
                 while (true) {
+                    int currentVersion = getVersion(); // Fetch the current version dynamically
+                    String message = "HEARTBEAT, version " + currentVersion + ", port " + tcpPort;
+                    ServerResponse response = new ServerResponse(true, message, null);
+                    byte[] data = gson.toJson(response).getBytes();
+
                     DatagramPacket packet = new DatagramPacket(data, data.length, group, multicastPort);
                     socket.send(packet);
-                    Thread.sleep(heartbeatInterval);
+
+                    Logger.info("Heartbeat sent: " + message);
+                    Thread.sleep(heartbeatInterval); // Send heartbeat every 10 seconds
                 }
             } catch (Exception e) {
                 Logger.error("Error sending heartbeat: " + e.getMessage());
             }
         }
+
+        private int getVersion() {
+            String query = "SELECT version FROM version";
+            try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath);
+                 PreparedStatement preparedStatement = connection.prepareStatement(query)) {
+                return preparedStatement.executeQuery().getInt("version");
+            } catch (Exception e) {
+                Logger.error("Error fetching version: " + e.getMessage());
+                return -1;
+            }
+        }
     }
+
 
 }

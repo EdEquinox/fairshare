@@ -1,7 +1,5 @@
 import com.google.gson.Gson;
-import model.Message;
 import model.ServerResponse;
-import org.apache.commons.logging.Log;
 import utils.Logger;
 
 import java.io.*;
@@ -126,7 +124,7 @@ public class BackupService {
 
         @Override
         public void run() {
-            try(MulticastSocket socket = new MulticastSocket(multicastPort)) {
+            try (MulticastSocket socket = new MulticastSocket(multicastPort)) {
                 InetAddress group = InetAddress.getByName(multicastAddress);
                 socket.joinGroup(group);
                 socket.setSoTimeout(timeout);
@@ -142,37 +140,40 @@ public class BackupService {
                     byte[] buffer = new byte[1024];
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                     socket.receive(packet);
+
                     ServerResponse response = gson.fromJson(new String(packet.getData(), 0, packet.getLength()), ServerResponse.class);
 
-                    if (response.payload()==null){
-                        Logger.info("Received heartbeat from server.");
-                    } else {
-                        if (response.isSuccess()) {
-                            Logger.info("Main server is alive.");
-                            ArrayList payload = gson.fromJson(gson.toJson(response.payload()), ArrayList.class);
-                            String query = gson.fromJson(gson.toJson(payload.get(0)), String.class);
-                            int mainVersion = gson.fromJson(gson.toJson(payload.get(1)), Integer.class);
-                            Logger.info("Query: " + query);
-                            if (query == null && version == getVersion()+1) {
-                                Logger.error("query is null and version is not updated.");
-                                System.exit(0);
-                            } else if (query != null && version != getVersion()) {
-                                Logger.info("version: " + version + " this.version: " + getVersion());
-                                Logger.error("query is not null and version is not updated.");
-                                System.exit(0);
-                            } else if (query != null && version == getVersion()) {
-                                setVersion(mainVersion);
-                                updateDatabase(query);
-                            } else if (query == null && version == getVersion()) {
-                                Logger.info("Nothing to update.");
-                            } else {
-                                Logger.error("Unknown error.");
-                                System.exit(0);
-                            }
+                    if (response.payload() == null) {
+                        Logger.info("Received heartbeat from server with message: " + response.message());
+                        continue;
+                    }
+
+                    if (!response.isSuccess()) {
+                        Logger.error("Main server is not alive.");
+                        stopBackupServer();
+                        return; // Exit loop after stopping server
+                    }
+
+                    ArrayList payload = gson.fromJson(gson.toJson(response.payload()), ArrayList.class);
+                    String query = gson.fromJson(gson.toJson(payload.get(0)), String.class);
+                    int mainVersion = gson.fromJson(gson.toJson(payload.get(1)), Integer.class);
+
+                    Logger.info("Received heartbeat. Main server version: " + mainVersion);
+                    Logger.info("Current backup version: " + getVersion());
+
+                    if (mainVersion > getVersion()) {
+                        setVersion(mainVersion);
+                        Logger.info("Version updated to: " + getVersion());
+
+                        if (query != null) {
+                            Logger.info("Processing query: " + query);
+                            updateDatabase(query);
+                            Logger.info("Database updated. Current version: " + getVersion());
                         } else {
-                            Logger.error("Main server is not alive.");
-                            stopBackupServer();
+                            Logger.info("No query to process. Version updated to: " + getVersion());
                         }
+                    } else {
+                        Logger.info("No updates required. Backup version is already up-to-date: " + getVersion());
                     }
                 }
             } catch (Exception e) {
@@ -180,5 +181,6 @@ public class BackupService {
             }
         }
     }
+
 
 }
